@@ -1,0 +1,29 @@
+nas:
+  # NASのマウントパス（Windowsドライブレター or UNCパス）
+  # 例: "Z:\\共有\\Excel" or "\\\\192.168.1.100\\shared\\excel"
+  base_path: "Z:\\共有\\Excel"
+  file_patterns:
+    - "*.xlsx"
+  exclude_patterns:
+    - "~$*"
+    - "*.tmp"
+    - ".~lock*"
+
+google:
+  # サービスアカウントのJSONキーファイルパス
+  credentials_path: "./config/service_account.json"
+  # 同期先Google DriveフォルダID（空なら自動作成）
+  drive_folder_id: ""
+  # スプレッドシートを共有するメールアドレス一覧
+  share_with: []
+    # - "sales@example.com"
+    # - "executive@example.com"
+
+sync:
+  interval_minutes: 15
+
+logging:
+  level: "INFO"
+  file: "./logs/tamatex.log"
+  max_size_mb: 10
+  backup_count: 5
