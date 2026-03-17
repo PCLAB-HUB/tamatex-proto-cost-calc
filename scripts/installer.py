@@ -23,6 +23,7 @@ from typing import Any
 
 import tkinter as tk
 import tkinter.ttk as ttk
+import yaml
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -1305,8 +1306,8 @@ class InstallerWizard:
             errors.append(f"仮想環境作成失敗: {e}")
         _progress(5)
 
-        # ------ Step 6: Install dependencies ------
-        self._log("[6/7] 依存パッケージをインストール中...", "step")
+        # ------ Step 6: Install package & dependencies ------
+        self._log("[6/7] tamatexパッケージをインストール中...", "step")
         self._log("  （数分かかる場合があります）", "info")
         try:
             # Determine pip executable path (Windows vs. Unix)
@@ -1315,27 +1316,25 @@ class InstallerWizard:
             else:
                 pip_exe = install_dir / ".venv" / "bin" / "pip"
 
-            req_file = install_dir / "requirements.txt"
-            if pip_exe.exists() and req_file.exists():
+            if pip_exe.exists():
+                # パッケージ本体をインストール（依存も自動解決される）
                 result = subprocess.run(
-                    [str(pip_exe), "install", "-r", str(req_file)],
+                    [str(pip_exe), "install", "."],
                     capture_output=True, text=True, timeout=600,
+                    cwd=str(install_dir),
                 )
                 if result.returncode != 0:
                     self._log(f"  pip出力: {result.stderr[:500]}", "warning")
                     raise RuntimeError(
                         f"pip install 失敗 (exit code {result.returncode})"
                     )
-                self._log("  依存パッケージインストール完了", "success")
+                self._log("  パッケージインストール完了", "success")
             else:
-                if not pip_exe.exists():
-                    self._log(f"  警告: pipが見つかりません: {pip_exe}", "warning")
-                if not req_file.exists():
-                    self._log(f"  警告: requirements.txtが見つかりません: {req_file}", "warning")
-                errors.append("pipまたはrequirements.txtが見つかりません")
+                self._log(f"  警告: pipが見つかりません: {pip_exe}", "warning")
+                errors.append("pipが見つかりません")
         except (subprocess.SubprocessError, RuntimeError, OSError) as e:
             self._log(f"  エラー: {e}", "error")
-            errors.append(f"依存パッケージインストール失敗: {e}")
+            errors.append(f"パッケージインストール失敗: {e}")
         _progress(6)
 
         # ------ Step 7: Create logs directory (ensure) ------
@@ -1383,7 +1382,7 @@ class InstallerWizard:
                 shutil.copy2(item, dest_item)
 
     def _create_config_yaml(self, install_dir: Path) -> None:
-        """Generate config.yaml from user inputs."""
+        """Generate config.yaml from user inputs using yaml.dump for safe serialization."""
         nas_path = self.nas_path_var.get().strip()
         folder_id = self.folder_id_var.get().strip()
         interval = self.sync_interval_var.get()
@@ -1398,44 +1397,34 @@ class InstallerWizard:
                     if email and re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
                         share_emails.append(email)
 
-        # Build share_with YAML block
-        if share_emails:
-            share_lines = "\n".join(f'    - "{e}"' for e in share_emails)
-            share_with_yaml = f"  share_with:\n{share_lines}"
-        else:
-            share_with_yaml = "  share_with: []"
-
-        # Escape backslashes for YAML string
-        nas_path_escaped = nas_path.replace("\\", "\\\\")
-
-        config_content = (
-            f'nas:\n'
-            f'  base_path: "{nas_path_escaped}"\n'
-            f'  file_patterns:\n'
-            f'    - "*.xlsx"\n'
-            f'  exclude_patterns:\n'
-            f'    - "~$*"\n'
-            f'    - "*.tmp"\n'
-            f'    - ".~lock*"\n'
-            f'\n'
-            f'google:\n'
-            f'  credentials_path: "./config/service_account.json"\n'
-            f'  drive_folder_id: "{folder_id}"\n'
-            f'{share_with_yaml}\n'
-            f'\n'
-            f'sync:\n'
-            f'  interval_minutes: {interval}\n'
-            f'\n'
-            f'logging:\n'
-            f'  level: "INFO"\n'
-            f'  file: "./logs/tamatex.log"\n'
-            f'  max_size_mb: 10\n'
-            f'  backup_count: 5\n'
-        )
+        config_data = {
+            "nas": {
+                "base_path": nas_path,
+                "file_patterns": ["*.xlsx"],
+                "exclude_patterns": ["~$*", "*.tmp", ".~lock*"],
+            },
+            "google": {
+                "credentials_path": "./config/service_account.json",
+                "drive_folder_id": folder_id,
+                "share_with": share_emails,
+            },
+            "sync": {
+                "interval_minutes": interval,
+            },
+            "logging": {
+                "level": "INFO",
+                "file": "./logs/tamatex.log",
+                "max_size_mb": 10,
+                "backup_count": 5,
+            },
+        }
 
         config_path = install_dir / "config" / "config.yaml"
         config_path.parent.mkdir(parents=True, exist_ok=True)
-        config_path.write_text(config_content, encoding="utf-8")
+        config_path.write_text(
+            yaml.dump(config_data, allow_unicode=True, default_flow_style=False, sort_keys=False),
+            encoding="utf-8",
+        )
 
     def _finish_installation(self, success: bool, errors: list[str]) -> None:
         """Finalize the installation process."""
