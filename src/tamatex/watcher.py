@@ -3,6 +3,7 @@
 import fnmatch
 import hashlib
 import logging
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -49,22 +50,26 @@ def scan_files(
     """NASフォルダをスキャンして対象ファイル一覧を返す。"""
     base = Path(base_path)
     if not base.exists():
-        logger.error("NASパスが見つかりません: %s", base_path)
-        return []
+        raise OSError(f"NASパスが見つかりません: {base_path}")
 
     files: list[FileInfo] = []
     for pattern in file_patterns:
-        for file_path in base.glob(pattern):
+        for file_path in base.rglob(pattern):
             if not file_path.is_file():
                 continue
             if _matches_any(file_path.name, exclude_patterns):
                 logger.debug("除外: %s", file_path.name)
                 continue
             try:
-                mtime = file_path.stat().st_mtime
-                file_hash = _compute_file_hash(file_path)
+                resolved = file_path.resolve()
+                mtime = resolved.stat().st_mtime
+                file_hash = _compute_file_hash(resolved)
+                time.sleep(0.5)
+                if resolved.stat().st_mtime != mtime:
+                    logger.debug("書き込み中のためスキップ: %s", resolved)
+                    continue
                 files.append(FileInfo(
-                    path=str(file_path),
+                    path=str(resolved),
                     mtime=mtime,
                     file_hash=file_hash,
                 ))
@@ -84,7 +89,12 @@ def detect_changes(current_files: list[FileInfo], state_db: StateDB) -> ChangeRe
 
     new_files: list[FileInfo] = []
     modified_files: list[FileInfo] = []
-    deleted_paths: list[str] = list(stored_paths - current_paths)
+
+    if not current_files and stored_paths:
+        logger.warning("現在のファイルが空ですがDBに状態が存在します。NAS切断の可能性があるため削除検知をスキップします。")
+        deleted_paths: list[str] = []
+    else:
+        deleted_paths = list(stored_paths - current_paths)
 
     for file_info in current_files:
         state = stored_states.get(file_info.path)

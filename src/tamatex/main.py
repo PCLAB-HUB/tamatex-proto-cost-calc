@@ -31,11 +31,16 @@ def sync_cycle(config: AppConfig, state_db: StateDB, client) -> dict:
     stats = {"scanned": 0, "synced": 0, "errors": 0, "skipped": 0}
 
     # 1. NASフォルダをスキャン
-    current_files = scan_files(
-        config.nas.base_path,
-        config.nas.file_patterns,
-        config.nas.exclude_patterns,
-    )
+    try:
+        current_files = scan_files(
+            config.nas.base_path,
+            config.nas.file_patterns,
+            config.nas.exclude_patterns,
+        )
+    except OSError as e:
+        logger.error("NAS接続エラー（次回サイクルで再試行）: %s", e)
+        return stats
+
     stats["scanned"] = len(current_files)
 
     if not current_files:

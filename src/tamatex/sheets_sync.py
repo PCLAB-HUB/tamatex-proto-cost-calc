@@ -83,10 +83,10 @@ def sync_workbook(
             logger.info("  シート追加: '%s'", sheet_data.name)
             time_module.sleep(API_WAIT_SECONDS)
 
-        # データ書き込み（クリア → 全書き込み）
+        # データ書き込み（上書き → 余剰行のみクリア）
         if sheet_data.rows:
-            worksheet.clear()
-            time_module.sleep(API_WAIT_SECONDS)
+            # 現在のシート行数を取得（余剰行削除のため）
+            old_row_count = worksheet.row_count
 
             # 行数・列数を調整
             max_cols = max(len(r) for r in sheet_data.rows)
@@ -95,9 +95,10 @@ def sync_workbook(
                 row + [""] * (max_cols - len(row)) for row in sheet_data.rows
             ]
 
+            # clear()なしで直接上書き（空白ウィンドウを排除）
             worksheet.update(
                 normalized_rows,
-                value_input_option="USER_ENTERED",
+                value_input_option="RAW",
             )
             logger.info(
                 "  シート更新: '%s' (%d行 x %d列)",
@@ -105,6 +106,17 @@ def sync_workbook(
                 len(normalized_rows),
                 max_cols,
             )
+
+            # 新データより多かった旧行を削除してゴミデータを残さない
+            new_row_count = len(normalized_rows)
+            if old_row_count > new_row_count:
+                excess_range = f"{new_row_count + 1}:{old_row_count}"
+                worksheet.batch_clear([excess_range])
+                logger.debug(
+                    "  余剰行クリア: '%s' (%s)",
+                    sheet_data.name,
+                    excess_range,
+                )
         else:
             worksheet.clear()
             logger.info("  シートクリア: '%s' (空)", sheet_data.name)
