@@ -478,8 +478,8 @@ class InstallerWizard:
         sidebar.pack_propagate(False)
 
         tk.Label(sidebar, text="セットアップ手順", font=("Helvetica", 10, "bold"),
-                 bg=C_SIDEBAR_BG, fg=C_TEXT_DARK, anchor="w", padx=12, pady=(16, 8)
-                 ).pack(fill=tk.X)
+                 bg=C_SIDEBAR_BG, fg=C_TEXT_DARK, anchor="w", padx=12
+                 ).pack(fill=tk.X, pady=(16, 8))
 
         for i, label_text in enumerate(STEP_LABELS):
             row = tk.Frame(sidebar, bg=C_SIDEBAR_BG)
