@@ -22,7 +22,7 @@ API_WAIT_SECONDS = 1.0
 def authenticate(credentials_path: str) -> gspread.Client:
     """サービスアカウントで認証し、gspreadクライアントを返す。"""
     creds = Credentials.from_service_account_file(credentials_path, scopes=SCOPES)
-    client = gspread.authorize(creds)
+    client = gspread.Client(auth=creds)
     logger.info("Google API認証成功")
     return client
 
@@ -34,17 +34,12 @@ def create_spreadsheet(
     share_with: list[str] | None = None,
 ) -> str:
     """新規スプレッドシートを作成し、IDを返す。"""
-    spreadsheet = client.create(title)
+    # folder_idが指定された場合は直接そのフォルダに作成する（gspread 6.x）
+    spreadsheet = client.create(title, folder_id=folder_id if folder_id else None)
     spreadsheet_id = spreadsheet.id
     logger.info("スプレッドシート作成: '%s' (ID: %s)", title, spreadsheet_id)
-
-    # フォルダに移動
     if folder_id:
-        try:
-            client.move_to_folder(spreadsheet, folder_id)
-            logger.info("フォルダに移動: %s", folder_id)
-        except Exception as e:
-            logger.warning("フォルダ移動失敗（続行）: %s", e)
+        logger.info("フォルダに作成: %s", folder_id)
 
     # 共有設定
     if share_with:
@@ -129,12 +124,15 @@ def sync_workbook(
         ws for name, ws in existing_sheets.items()
         if name not in target_sheet_names
     ]
-    remaining = len(target_sheet_names)
+    deleted_count = 0
+    total_sheets = len(target_sheet_names) + len(sheets_to_delete)
     for ws in sheets_to_delete:
-        if remaining + (len(sheets_to_delete) - sheets_to_delete.index(ws)) <= 1:
+        # 削除後の残シート数が0になる場合は中断する
+        if total_sheets - deleted_count <= 1:
             break
         try:
             spreadsheet.del_worksheet(ws)
+            deleted_count += 1
             logger.info("  シート削除: '%s'", ws.title)
             time_module.sleep(API_WAIT_SECONDS)
         except Exception as e:

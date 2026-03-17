@@ -4,6 +4,7 @@ import argparse
 import logging
 import signal
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -16,18 +17,23 @@ from tamatex.watcher import scan_files, detect_changes
 
 logger = logging.getLogger("tamatex")
 
-# グレースフルシャットダウン用フラグ
-_shutdown_requested = False
+# グレースフルシャットダウン用イベント
+_shutdown_event = threading.Event()
 
 
 def _handle_signal(signum, frame):
-    global _shutdown_requested
     logger.info("シャットダウンシグナル受信 (signal=%d)", signum)
-    _shutdown_requested = True
+    _shutdown_event.set()
 
 
-def sync_cycle(config: AppConfig, state_db: StateDB, client) -> dict:
+def sync_cycle(
+    config: AppConfig,
+    state_db: StateDB,
+    client,
+    shutdown_event: threading.Event | None = None,
+) -> dict:
     """1回の同期サイクルを実行する。"""
+    _event = shutdown_event or _shutdown_event
     stats = {"scanned": 0, "synced": 0, "errors": 0, "skipped": 0}
 
     # 1. NASフォルダをスキャン
@@ -53,12 +59,14 @@ def sync_cycle(config: AppConfig, state_db: StateDB, client) -> dict:
     files_to_sync = changes.new_files + changes.modified_files
     if not files_to_sync:
         logger.info("変更なし — スキップ")
+        stats["skipped"] = stats["scanned"]
         return stats
 
     # 3. 変更ファイルを同期
     for file_info in files_to_sync:
-        if _shutdown_requested:
+        if _event.is_set():
             logger.info("シャットダウン要求のため同期中断")
+            stats["skipped"] += len(files_to_sync) - stats["synced"] - stats["errors"]
             break
 
         file_path = file_info.path
@@ -111,7 +119,7 @@ def sync_cycle(config: AppConfig, state_db: StateDB, client) -> dict:
 
 def run(config_path: str) -> None:
     """メインループ。設定読み込み → 認証 → 定期同期。"""
-    global _shutdown_requested
+    _shutdown_event.clear()
 
     # シグナルハンドラ登録
     signal.signal(signal.SIGINT, _handle_signal)
@@ -133,39 +141,30 @@ def run(config_path: str) -> None:
     interval_sec = config.sync.interval_minutes * 60
 
     # 初回同期を即座に実行
+    _run_sync_cycle(config, state_db, client)
+
+    # 定期実行ループ
+    while not _shutdown_event.is_set():
+        logger.info("次回同期まで %d分 待機...", config.sync.interval_minutes)
+        # Event.waitで待機（シグナルで即座に解除される）
+        if _shutdown_event.wait(timeout=interval_sec):
+            break
+        _run_sync_cycle(config, state_db, client)
+
+    logger.info("=== tamatex 正常終了 ===")
+
+
+def _run_sync_cycle(config: AppConfig, state_db: StateDB, client) -> None:
+    """同期サイクルを1回実行してログ出力する。"""
     logger.info("--- 同期サイクル開始 ---")
     try:
-        stats = sync_cycle(config, state_db, client)
+        stats = sync_cycle(config, state_db, client, _shutdown_event)
         logger.info(
-            "--- 同期サイクル完了: スキャン=%d, 同期=%d, エラー=%d ---",
-            stats["scanned"], stats["synced"], stats["errors"],
+            "--- 同期サイクル完了: スキャン=%d, 同期=%d, スキップ=%d, エラー=%d ---",
+            stats["scanned"], stats["synced"], stats["skipped"], stats["errors"],
         )
     except Exception as e:
         logger.error("同期サイクルで予期しないエラー: %s", e, exc_info=True)
-
-    # 定期実行ループ
-    while not _shutdown_requested:
-        logger.info("次回同期まで %d分 待機...", config.sync.interval_minutes)
-        # 待機中もシャットダウン要求を検知するため小刻みにsleep
-        for _ in range(interval_sec):
-            if _shutdown_requested:
-                break
-            time.sleep(1)
-
-        if _shutdown_requested:
-            break
-
-        logger.info("--- 同期サイクル開始 ---")
-        try:
-            stats = sync_cycle(config, state_db, client)
-            logger.info(
-                "--- 同期サイクル完了: スキャン=%d, 同期=%d, エラー=%d ---",
-                stats["scanned"], stats["synced"], stats["errors"],
-            )
-        except Exception as e:
-            logger.error("同期サイクルで予期しないエラー: %s", e, exc_info=True)
-
-    logger.info("=== tamatex 正常終了 ===")
 
 
 def main():

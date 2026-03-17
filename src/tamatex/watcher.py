@@ -62,15 +62,15 @@ def scan_files(
                 continue
             try:
                 resolved = file_path.resolve()
-                mtime = resolved.stat().st_mtime
+                mtime_before = resolved.stat().st_mtime
                 file_hash = _compute_file_hash(resolved)
-                time.sleep(0.5)
-                if resolved.stat().st_mtime != mtime:
+                mtime_after = resolved.stat().st_mtime
+                if mtime_after != mtime_before:
                     logger.debug("書き込み中のためスキップ: %s", resolved)
                     continue
                 files.append(FileInfo(
                     path=str(resolved),
-                    mtime=mtime,
+                    mtime=mtime_before,
                     file_hash=file_hash,
                 ))
             except OSError as e:

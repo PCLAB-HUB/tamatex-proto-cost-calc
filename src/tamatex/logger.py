@@ -10,9 +10,12 @@ from tamatex.config import LogConfig
 def setup_logger(config: LogConfig) -> logging.Logger:
     """アプリケーションロガーを初期化する。"""
     logger = logging.getLogger("tamatex")
-    logger.setLevel(getattr(logging, config.level.upper(), logging.INFO))
+    new_level = getattr(logging, config.level.upper(), logging.INFO)
+    logger.setLevel(new_level)
 
     if logger.handlers:
+        for handler in logger.handlers:
+            handler.setLevel(new_level)
         return logger
 
     formatter = logging.Formatter(

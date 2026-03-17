@@ -53,9 +53,19 @@ def load_config(path: str | Path) -> AppConfig:
     if not data:
         raise ValueError(f"設定ファイルが空です: {config_path}")
 
-    return AppConfig(
-        nas=NasConfig(**data.get("nas", {})),
-        google=GoogleConfig(**data.get("google", {})),
-        sync=SyncConfig(**data.get("sync", {})),
-        logging=LogConfig(**data.get("logging", {})),
-    )
+    try:
+        nas_data = data.get("nas")
+        if not nas_data:
+            raise ValueError(f"設定ファイルに 'nas' セクションがありません: {config_path}")
+        google_data = data.get("google")
+        if not google_data:
+            raise ValueError(f"設定ファイルに 'google' セクションがありません: {config_path}")
+
+        return AppConfig(
+            nas=NasConfig(**nas_data),
+            google=GoogleConfig(**google_data),
+            sync=SyncConfig(**data.get("sync", {})),
+            logging=LogConfig(**data.get("logging", {})),
+        )
+    except TypeError as e:
+        raise ValueError(f"設定ファイルのパラメータが不正です ({config_path}): {e}") from e

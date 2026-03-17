@@ -1,6 +1,7 @@
 """状態管理モジュール。SQLiteでファイルの同期状態を永続管理する。"""
 
 import sqlite3
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -56,8 +57,6 @@ class StateDB:
         spreadsheet_id: str,
     ) -> None:
         """ファイルの同期状態を更新（upsert）。"""
-        import time
-
         with self._connect() as conn:
             conn.execute(
                 """
