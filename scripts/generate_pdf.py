@@ -700,7 +700,7 @@ def build_pdf(output_path: str):
 # ============================================================
 if __name__ == "__main__":
     project_root = Path(__file__).resolve().parent.parent
-    output = project_root / "docs" / "system-overview.pdf"
+    output = project_root / "docs" / "システム仕様書.pdf"
     output.parent.mkdir(parents=True, exist_ok=True)
     build_pdf(str(output))
     print(f"PDF generated: {output}")
