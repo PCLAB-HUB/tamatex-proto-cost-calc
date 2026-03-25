@@ -3,26 +3,41 @@
 import logging
 import time as time_module
 
+import os
+import stat
+import sys
+
 import gspread
-from google.oauth2.service_account import Credentials
 
 from tamatex.excel_reader import WorkbookData
 
 logger = logging.getLogger("tamatex")
-
-SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive",
-]
 
 # API呼び出し間の待機秒数（レート制限対策）
 API_WAIT_SECONDS = 1.0
 
 
 def authenticate(credentials_path: str) -> gspread.Client:
-    """サービスアカウントで認証し、gspreadクライアントを返す。"""
-    creds = Credentials.from_service_account_file(credentials_path, scopes=SCOPES)
-    client = gspread.Client(auth=creds)
+    """サービスアカウントで認証し、gspreadクライアントを返す。
+
+    gspread.service_account() を使用することで、トークンの自動リフレッシュが保証される。
+    """
+    from pathlib import Path
+
+    cred_path = Path(credentials_path)
+    if not cred_path.exists():
+        raise FileNotFoundError(f"認証ファイルが見つかりません: {credentials_path}")
+
+    # Unix系: パーミッションが緩すぎる場合に警告（F-01対策）
+    if sys.platform != "win32":
+        mode = oct(cred_path.stat().st_mode)[-3:]
+        if mode not in ("600", "400"):
+            logger.warning(
+                "認証ファイルのパーミッションが緩すぎます: %s (現在: %s, 推奨: 600)",
+                cred_path, mode,
+            )
+
+    client = gspread.service_account(filename=str(cred_path))
     logger.info("Google API認証成功")
     return client
 

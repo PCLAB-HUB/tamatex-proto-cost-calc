@@ -23,6 +23,7 @@ class GoogleConfig:
 @dataclass(frozen=True)
 class SyncConfig:
     interval_minutes: int = 15
+    state_db_path: str = ""
 
 
 @dataclass(frozen=True)

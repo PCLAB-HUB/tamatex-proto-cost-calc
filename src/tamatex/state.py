@@ -20,11 +20,12 @@ class StateDB:
 
     def __init__(self, db_path: str | Path = "./tamatex_state.db"):
         self._db_path = str(db_path)
+        self._conn: sqlite3.Connection = sqlite3.connect(self._db_path)
         self._init_db()
 
     def _init_db(self) -> None:
-        with self._connect() as conn:
-            conn.execute("""
+        with self._conn:
+            self._conn.execute("""
                 CREATE TABLE IF NOT EXISTS file_states (
                     file_path TEXT PRIMARY KEY,
                     mtime REAL NOT NULL,
@@ -34,17 +35,25 @@ class StateDB:
                 )
             """)
 
-    def _connect(self) -> sqlite3.Connection:
-        return sqlite3.connect(self._db_path)
+    def close(self) -> None:
+        """コネクションを閉じる。"""
+        if self._conn:
+            self._conn.close()
+            self._conn = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
 
     def get_state(self, file_path: str) -> FileState | None:
         """指定ファイルの同期状態を取得。"""
-        with self._connect() as conn:
-            row = conn.execute(
-                "SELECT file_path, mtime, file_hash, spreadsheet_id, last_sync "
-                "FROM file_states WHERE file_path = ?",
-                (file_path,),
-            ).fetchone()
+        row = self._conn.execute(
+            "SELECT file_path, mtime, file_hash, spreadsheet_id, last_sync "
+            "FROM file_states WHERE file_path = ?",
+            (file_path,),
+        ).fetchone()
         if row is None:
             return None
         return FileState(*row)
@@ -57,8 +66,8 @@ class StateDB:
         spreadsheet_id: str,
     ) -> None:
         """ファイルの同期状態を更新（upsert）。"""
-        with self._connect() as conn:
-            conn.execute(
+        with self._conn:
+            self._conn.execute(
                 """
                 INSERT INTO file_states (file_path, mtime, file_hash, spreadsheet_id, last_sync)
                 VALUES (?, ?, ?, ?, ?)
@@ -73,14 +82,13 @@ class StateDB:
 
     def get_all_states(self) -> list[FileState]:
         """全ファイルの同期状態を取得。"""
-        with self._connect() as conn:
-            rows = conn.execute(
-                "SELECT file_path, mtime, file_hash, spreadsheet_id, last_sync "
-                "FROM file_states"
-            ).fetchall()
+        rows = self._conn.execute(
+            "SELECT file_path, mtime, file_hash, spreadsheet_id, last_sync "
+            "FROM file_states"
+        ).fetchall()
         return [FileState(*row) for row in rows]
 
     def remove_state(self, file_path: str) -> None:
         """指定ファイルの同期状態を削除。"""
-        with self._connect() as conn:
-            conn.execute("DELETE FROM file_states WHERE file_path = ?", (file_path,))
+        with self._conn:
+            self._conn.execute("DELETE FROM file_states WHERE file_path = ?", (file_path,))

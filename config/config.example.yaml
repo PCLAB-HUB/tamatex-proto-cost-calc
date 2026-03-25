@@ -21,6 +21,8 @@ google:
 
 sync:
   interval_minutes: 15
+  # 状態DBファイルのパス（空なら設定ファイルと同じディレクトリに自動作成）
+  # state_db_path: "C:\\tamatex\\tamatex_state.db"
 
 logging:
   level: "INFO"

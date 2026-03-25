@@ -52,6 +52,7 @@ def scan_files(
     if not base.exists():
         raise OSError(f"NASパスが見つかりません: {base_path}")
 
+    base_resolved = base.resolve()
     files: list[FileInfo] = []
     for pattern in file_patterns:
         for file_path in base.rglob(pattern):
@@ -62,6 +63,12 @@ def scan_files(
                 continue
             try:
                 resolved = file_path.resolve()
+                # シンボリックリンクによるbase_path外への追跡を防止
+                try:
+                    resolved.relative_to(base_resolved)
+                except ValueError:
+                    logger.warning("base_path外のファイル（スキップ）: %s -> %s", file_path, resolved)
+                    continue
                 mtime_before = resolved.stat().st_mtime
                 file_hash = _compute_file_hash(resolved)
                 mtime_after = resolved.stat().st_mtime

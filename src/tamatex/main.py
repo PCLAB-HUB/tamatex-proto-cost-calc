@@ -1,6 +1,7 @@
 """メインモジュール。同期サイクルの実行とスケジューリング。"""
 
 import argparse
+import atexit
 import logging
 import signal
 import sys
@@ -8,6 +9,7 @@ import threading
 import time
 from pathlib import Path
 
+from tamatex import __version__
 from tamatex.config import load_config, AppConfig
 from tamatex.excel_reader import read_workbook
 from tamatex.logger import setup_logger
@@ -117,7 +119,7 @@ def sync_cycle(
     return stats
 
 
-def run(config_path: str) -> None:
+def run(config_path: str | Path) -> None:
     """メインループ。設定読み込み → 認証 → 定期同期。"""
     _shutdown_event.clear()
 
@@ -128,12 +130,18 @@ def run(config_path: str) -> None:
     # 設定読み込み
     config = load_config(config_path)
     setup_logger(config.logging)
-    logger.info("=== tamatex 起動 (v0.1.0) ===")
+    logger.info("=== tamatex 起動 (v%s) ===", __version__)
     logger.info("NASパス: %s", config.nas.base_path)
     logger.info("同期間隔: %d分", config.sync.interval_minutes)
 
-    # 状態DB初期化
-    state_db = StateDB()
+    # 状態DB初期化（絶対パスで解決）
+    if config.sync.state_db_path:
+        db_path = Path(config.sync.state_db_path)
+    else:
+        db_path = Path(config_path).resolve().parent / "tamatex_state.db"
+    state_db = StateDB(db_path=db_path)
+    atexit.register(state_db.close)
+    logger.info("状態DB: %s", db_path)
 
     # Google API認証
     client = authenticate(config.google.credentials_path)
