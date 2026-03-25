@@ -3,8 +3,6 @@
 import logging
 import time as time_module
 
-import os
-import stat
 import sys
 
 import gspread
