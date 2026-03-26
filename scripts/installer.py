@@ -1410,6 +1410,7 @@ class InstallerWizard:
             },
             "sync": {
                 "interval_minutes": interval,
+                "state_db_path": "",
             },
             "logging": {
                 "level": "INFO",

@@ -24,49 +24,57 @@ def main():
 
     # 認証
     client = authenticate(config.google.credentials_path)
-    state_db = StateDB()
 
-    # NASスキャン
-    files = scan_files(
-        config.nas.base_path,
-        config.nas.file_patterns,
-        config.nas.exclude_patterns,
-    )
+    # 状態DB（main.pyと同じパス解決ロジック）
+    if config.sync.state_db_path:
+        db_path = Path(config.sync.state_db_path)
+    else:
+        db_path = Path(config_path).resolve().parent / "tamatex_state.db"
 
-    if not files:
-        logger.warning("対象ファイルが見つかりません: %s", config.nas.base_path)
-        return
+    with StateDB(db_path=db_path) as state_db:
+        logger.info("状態DB: %s", db_path)
 
-    logger.info("検出ファイル: %d 個", len(files))
-
-    for file_info in files:
-        file_name = Path(file_info.path).stem
-        state = state_db.get_state(file_info.path)
-
-        if state and state.spreadsheet_id:
-            logger.info("スキップ（既存）: %s → %s", file_name, state.spreadsheet_id)
-            continue
-
-        # スプレッドシート作成
-        spreadsheet_id = create_spreadsheet(
-            client,
-            title=f"[同期] {file_name}",
-            folder_id=config.google.drive_folder_id,
-            share_with=config.google.share_with,
+        # NASスキャン
+        files = scan_files(
+            config.nas.base_path,
+            config.nas.file_patterns,
+            config.nas.exclude_patterns,
         )
 
-        # 状態保存（hash=空で保存。次回同期で実データが書き込まれる）
-        state_db.update_state(
-            file_path=file_info.path,
-            mtime=0,
-            file_hash="",
-            spreadsheet_id=spreadsheet_id,
-        )
+        if not files:
+            logger.warning("対象ファイルが見つかりません: %s", config.nas.base_path)
+            return
 
-        logger.info("作成完了: %s → %s", file_name, spreadsheet_id)
+        logger.info("検出ファイル: %d 個", len(files))
+
+        for file_info in files:
+            file_name = Path(file_info.path).stem
+            state = state_db.get_state(file_info.path)
+
+            if state and state.spreadsheet_id:
+                logger.info("スキップ（既存）: %s → %s", file_name, state.spreadsheet_id)
+                continue
+
+            # スプレッドシート作成
+            spreadsheet_id = create_spreadsheet(
+                client,
+                title=f"[同期] {file_name}",
+                folder_id=config.google.drive_folder_id,
+                share_with=config.google.share_with,
+            )
+
+            # 状態保存（hash=空で保存。次回同期で実データが書き込まれる）
+            state_db.update_state(
+                file_path=file_info.path,
+                mtime=0,
+                file_hash="",
+                spreadsheet_id=spreadsheet_id,
+            )
+
+            logger.info("作成完了: %s → %s", file_name, spreadsheet_id)
 
     logger.info("=== 初回セットアップ完了 ===")
-    logger.info("次のステップ: python -m tamatex.main で同期を開始してください")
+    logger.info("次のステップ: python -m tamatex.main -c config/config.yaml で同期を開始してください")
 
 
 if __name__ == "__main__":
