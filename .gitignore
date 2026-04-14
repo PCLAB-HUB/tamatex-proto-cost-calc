@@ -9,3 +9,4 @@ logs/*.log.*
 *.db
 .env
 .DS_Store
+.worktrees/
