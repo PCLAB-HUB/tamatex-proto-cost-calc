@@ -54,7 +54,6 @@ def _render_gift_detail(
     gift: GiftSet,
     result: GiftSetResult,
     items: dict[str, SingleItem],
-    idx: int,
 ) -> None:
     """ギフトセット1件の詳細表示."""
     with st.expander(f"{gift.name} — 粗利率 {result.gross_profit_rate:.1%}", expanded=False):
@@ -118,7 +117,7 @@ def render_gifts(
 
     # --- 個別詳細 ---
     st.subheader("セット別詳細")
-    for idx, (gift, result) in enumerate(zip(gifts, results)):
-        _render_gift_detail(gift, result, items, idx)
+    for gift, result in zip(gifts, results):
+        _render_gift_detail(gift, result, items)
 
     return gifts, results

@@ -26,6 +26,10 @@ def calc_summary(
     Returns:
         集計結果
     """
+    if len(gifts) != len(results):
+        raise ValueError(
+            f"gifts({len(gifts)}件)とresults({len(results)}件)の長さが一致しません"
+        )
     total_quantity = sum(g.sales_quantity for g in gifts)
     total_sales = sum(r.sales_amount for r in results)
     total_profit = sum(r.profit_amount for r in results)

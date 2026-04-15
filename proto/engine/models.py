@@ -6,7 +6,6 @@ Excelの「ひな形」シートの構造をdataclassで表現する。
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
 
 

@@ -12,8 +12,8 @@ from proto.engine.models import GiftSetResult, SingleItemResult
 # 単品: (品番, 品名, FOB円, 製造原価, C&F, CIF, 関税, 輸入経費/個, 物流/個, 円建原価)
 EXCEL_SINGLE_VALUES = [
     ("MOCK-001", "OSD-MOCO BT",  570.0, 570.0, 572.175, 573.205, 42.341, 17.926, 3.16, 636.631),
-    ("MOCK-003", "OSD-MOCO FT",  243.0, 243.0, 245.175, 245.616, 18.176, 17.926, 0.0, 281.718),
-    ("MOCK-004", "OSD-FUWA FT",  201.0, 201.0, 203.0,   203.365, 15.049, 17.926, 0.0, 236.340),
+    ("MOCK-003", "OSD-MOCO FT",  243.0, 243.0, 245.250, 245.691, 18.149, 18.544, 0.0, 282.384),
+    ("MOCK-004", "OSD-FUWA FT",  201.0, 201.0, 204.000, 204.367, 15.096, 24.725, 0.0, 244.188),
 ]
 
 # ギフト: (name, 製造原価, 見積単価, 粗利率, FOB合計, CIF, 関税, 輸入単価, 物流)
@@ -89,7 +89,8 @@ def render_verify(
 
     if single_rows:
         df_s = pd.DataFrame(single_rows)
-        st.dataframe(df_s, use_container_width=True, hide_index=True)
+        styled_s = df_s.style.map(_delta_style, subset=["差異"])
+        st.dataframe(styled_s, use_container_width=True, hide_index=True)
         st.success(f"単品: {single_ok}/{single_total} 項目 OK")
 
     # --- ギフト検証 ---
@@ -129,7 +130,8 @@ def render_verify(
 
     if gift_rows:
         df_g = pd.DataFrame(gift_rows)
-        st.dataframe(df_g, use_container_width=True, hide_index=True)
+        styled_g = df_g.style.map(_delta_style, subset=["差異"])
+        st.dataframe(styled_g, use_container_width=True, hide_index=True)
 
         if gift_ok == gift_total:
             st.success(f"ギフト: {gift_ok}/{gift_total} 項目 OK — 全項目一致")

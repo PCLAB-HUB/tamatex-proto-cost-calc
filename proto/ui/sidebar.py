@@ -77,16 +77,21 @@ def render_sidebar() -> ImportCondition:
     )
     base_cond = _CONDITIONS[selected]
 
+    # コンテナ切替時にwidget値をリセットするため、キーにプレフィックスを付与
+    kp = selected.replace(" ", "_").replace("/", "_")
+
     st.sidebar.divider()
 
     # --- 為替 ---
     st.sidebar.subheader("為替レート")
     cols = st.sidebar.columns(2)
     internal_rate = cols[0].number_input(
-        "社内為替 (円/$)", value=base_cond.internal_rate, step=1.0, key="internal_rate"
+        "社内為替 (円/$)", value=base_cond.internal_rate, step=1.0,
+        min_value=1.0, key=f"{kp}_internal_rate",
     )
     current_rate = cols[1].number_input(
-        "現行為替 (円/$)", value=base_cond.current_rate, step=1.0, key="current_rate"
+        "現行為替 (円/$)", value=base_cond.current_rate, step=1.0,
+        min_value=1.0, key=f"{kp}_current_rate",
     )
 
     st.sidebar.divider()
@@ -95,22 +100,25 @@ def render_sidebar() -> ImportCondition:
     st.sidebar.subheader("マージン・ロス率")
     cols2 = st.sidebar.columns(2)
     margin_pct = cols2[0].number_input(
-        "マージン (%)", value=base_cond.margin_pct, step=1.0, key="margin_pct"
+        "マージン (%)", value=base_cond.margin_pct, step=1.0,
+        min_value=0.0, key=f"{kp}_margin_pct",
     )
     loss_rate_pct = cols2[1].number_input(
-        "ロス率 (%)", value=base_cond.loss_rate_pct, step=1.0, key="loss_rate_pct"
+        "ロス率 (%)", value=base_cond.loss_rate_pct, step=1.0,
+        min_value=0.0, key=f"{kp}_loss_rate_pct",
     )
 
     # --- 資材 ---
     cols3 = st.sidebar.columns(2)
     material_lot = cols3[0].number_input(
-        "資材ロット", value=base_cond.material_lot, step=100, key="material_lot"
+        "資材ロット", value=base_cond.material_lot, step=100,
+        min_value=1, key=f"{kp}_material_lot",
     )
     material_loss_pct = cols3[1].number_input(
         "資材ロス率 (%)",
         value=base_cond.material_loss_pct,
         step=0.5,
-        key="material_loss_pct",
+        min_value=0.0, key=f"{kp}_material_loss_pct",
     )
 
     st.sidebar.divider()
@@ -118,16 +126,17 @@ def render_sidebar() -> ImportCondition:
     # --- 輸入 ---
     st.sidebar.subheader("輸入パラメータ")
     overseas_freight = st.sidebar.number_input(
-        "海外運賃 (USD)", value=base_cond.overseas_freight_usd, step=10.0, key="freight"
+        "海外運賃 (USD)", value=base_cond.overseas_freight_usd, step=10.0,
+        min_value=0.0, key=f"{kp}_freight",
     )
     cols4 = st.sidebar.columns(2)
     insurance_rate = cols4[0].number_input(
         "保険率", value=base_cond.insurance_rate, step=0.0001, format="%.4f",
-        key="insurance",
+        min_value=0.0, key=f"{kp}_insurance",
     )
     tariff_rate = cols4[1].number_input(
         "関税率", value=base_cond.tariff_rate, step=0.001, format="%.3f",
-        key="tariff",
+        min_value=0.0, key=f"{kp}_tariff",
     )
 
     st.sidebar.divider()
@@ -136,13 +145,16 @@ def render_sidebar() -> ImportCondition:
     st.sidebar.subheader("物流")
     cols5 = st.sidebar.columns(3)
     io_fee = cols5[0].number_input(
-        "入出庫 (円)", value=base_cond.io_fee, step=10.0, key="io_fee"
+        "入出庫 (円)", value=base_cond.io_fee, step=10.0,
+        min_value=0.0, key=f"{kp}_io_fee",
     )
     storage_fee = cols5[1].number_input(
-        "保管料 (円)", value=base_cond.storage_fee, step=10.0, key="storage_fee"
+        "保管料 (円)", value=base_cond.storage_fee, step=10.0,
+        min_value=0.0, key=f"{kp}_storage_fee",
     )
     storage_months = cols5[2].number_input(
-        "ヶ月", value=base_cond.storage_months, step=1.0, key="storage_months"
+        "ヶ月", value=base_cond.storage_months, step=1.0,
+        min_value=0.0, key=f"{kp}_storage_months",
     )
 
     st.sidebar.divider()
@@ -151,10 +163,10 @@ def render_sidebar() -> ImportCondition:
     st.sidebar.subheader("輸入経費")
     with st.sidebar:
         exp_single = _edit_import_expenses(
-            "単品用 輸入経費", base_cond.import_expenses_single, "exp_s"
+            "単品用 輸入経費", base_cond.import_expenses_single, f"{kp}_exp_s",
         )
         exp_gift = _edit_import_expenses(
-            "ギフト用 輸入経費", base_cond.import_expenses_gift, "exp_g"
+            "ギフト用 輸入経費", base_cond.import_expenses_gift, f"{kp}_exp_g",
         )
 
     return ImportCondition(

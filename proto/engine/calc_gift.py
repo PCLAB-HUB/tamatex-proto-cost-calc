@@ -58,6 +58,10 @@ def calc_gift_set(
     towel_cost = 0.0
     breakdown_qty: dict[str, int] = {}
     for comp in gift.composition:
+        if comp.item_no not in item_results:
+            raise ValueError(
+                f"ギフト'{gift.name}'の構成品番'{comp.item_no}'が単品計算結果に見つかりません"
+            )
         item_result = item_results[comp.item_no]
         towel_cost += item_result.manufacturing_cost * comp.quantity
         # 分解数 = 販売数量 × 使用枚数
