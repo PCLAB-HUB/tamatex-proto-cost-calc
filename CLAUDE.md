@@ -24,6 +24,7 @@ scripts/
 ├── generate_estimate_pdf.py    # 見積書PDF生成
 ├── generate_review_report_pdf.py  # コードレビュー報告書PDF生成
 ├── generate_proposal_pdf.py       # 業務改善提案書PDF生成
+├── generate_document_feasibility_pdf.py  # 帳票生成実現可能性分析PDF
 └── build_installer.bat  # PyInstallerでexe化
 
 config/
@@ -36,21 +37,23 @@ tests/                # pytest ユニットテスト（107件）
 ├── test_excel_reader.py  # 23件
 └── test_logger.py    # 17件
 
-docs/
+docs/                        # tamatex本体ドキュメント＋両プロジェクト共通資料
 ├── システム仕様書.md
 ├── システム仕様書.pdf
 ├── 導入手順書.md
 ├── コードレビュー報告書.pdf  # 4観点統合レビュー（7ページ）
 ├── 見積書.pdf
 ├── 業務改善提案書.pdf        # 45項目4フェーズ（6ページ）
-├── 営業_原価計算（輸入）.xlsx  # 現行Excel原価計算シート（解析済み）
-├── 2026-04-15_原価計算プロトタイプ計画書.md  # プロトタイプ実装計画（全量仕様）
-├── 04-14 会議_品番管理システムと原価計算の課題-Summary.md
-├── 04-14 会議_品番管理システムと原価計算の課題-会議議事録.md
-├── 2026-04-07_会議要約.md    # PLAUD AI要約タブ
+├── 2026-04-07_会議要約.md    # PLAUD AI要約タブ（両プロジェクト起点会議）
 ├── 2026-04-07_会議議事録.md  # PLAUD AI議事録タブ（タイムスタンプ付き33セクション）
-└── plans/
-    └── 2026-03-26-phase1-critical-fixes.md
+├── plans/
+│   └── 2026-03-26-phase1-critical-fixes.md
+└── cost-calc/                # 原価計算プロトタイプ関連資料（feature/proto-cost-calc用）
+    ├── 2026-04-15_原価計算プロトタイプ計画書.md  # プロトタイプ実装計画（全量仕様）
+    ├── 営業_原価計算（輸入）.xlsx  # 現行Excel原価計算シート（解析済み）
+    ├── 帳票生成_実現可能性分析.pdf  # 4帳票の実現可能性（5ページ）
+    ├── 04-14 会議_品番管理システムと原価計算の課題-Summary.md
+    └── 04-14 会議_品番管理システムと原価計算の課題-会議議事録.md
 
 proto/                    # 原価計算プロトタイプ（feature/proto-cost-calcブランチ）
 ├── engine/               # 計算エンジン（本番移植可能）
@@ -63,12 +66,18 @@ proto/                    # 原価計算プロトタイプ（feature/proto-cost-
 │   ├── mock_items.py     # 単品6品目
 │   ├── mock_gifts.py     # ギフト12パターン
 │   └── mock_params.py    # 輸入条件20FT/40FT
-├── ui/                   # Streamlit UI（未実装）
+├── ui/                   # Streamlit UI（実装済み）
+│   ├── sidebar.py        # サイドバー（条件設定、コンテナ切替対応）
+│   ├── section_basic.py  # 基本情報表示
+│   ├── section_items.py  # 単品タオル一覧
+│   ├── section_gift.py   # ギフトセット構成・詳細
+│   ├── section_result.py # 比較一覧（チャート付き）
+│   └── section_verify.py # Excel検証セクション（120/120全一致）
 ├── tests/                # 計算エンジンテスト（131件）
 │   ├── test_calc_single.py
 │   ├── test_calc_gift.py
 │   └── test_calc_summary.py
-└── app.py                # Streamlitエントリーポイント（未実装）
+└── app.py                # Streamlitエントリーポイント（5タブ構成）
 
 # プロトタイプ作業管理ファイル（プロジェクトルート）
 task_plan.md              # タスク一覧・進捗管理
@@ -104,40 +113,70 @@ python scripts/initial_setup.py
 
 ## 現在の作業状態
 
-### 直近の作業（2026-04-15 セッション2）
+### 直近の作業（2026-04-16 セッション6 — 現場導入ライブサポート）
 
-1. **原価計算プロトタイプ Phase 1 完了** (0d9e01b, feature/proto-cost-calc)
-   - 計算エンジン全体を実装（単品・ギフト・輸入経費・物流・集計）
-   - Excel実値と±0.01円以内の完全一致を検証（131テスト全PASS）
-   - worktree: `.worktrees/proto-cost-calc`
-   - 計画書との乖離を多数発見・修正（輸入経費パラメータ差異、ギフトデータ不正確等）
+**tamatex 初回現場導入を実施中、config.yaml作成途中でセッション終了**。次回は即座に続きから再開。
 
-2. **Excel解析の追加発見**
-   - 輸入経費パラメータが単品/ギフトで異なる（BQ: 20000 vs 0, BW: 0 vs 19200）
-   - CA式のBO列はCIC(USD=180)、CY CHARGEではない
-   - CA式の為替: 単品=$N$4(現行), ギフト=$M$4(社内)
+#### 現場環境（確定）
+- **インストールPC**: Windows 11、Python既存（PATH通過済み）、PowerShell
+- **インストール先**: `C:\nas-googlesync`（zip展開先 `C:\tamatex` と分離）
+- **NASパス**: `Z:\`（同期対象の親フォルダそのものをZドライブに永続マップ済み）
+- **Google Drive フォルダID**: `1mIscR0MzvkIL7kVmEo5RgZHHUcEGdx--`
+- **同期間隔**: 15分
+- **共有先メール**: 今回は空 `[]`
+- **service_account.json**: `C:\Users\User\Downloads\tamatex-ba84a8f4a9c1.json`（インストール先の `config/` に配置済み）
 
-### 前回の作業（2026-04-15 セッション1）
+#### 進捗
+- ✅ 現場配布用 `tamatex.zip` 作成（机上作業、239KB、社内機密除外済み）
+- ✅ `setup.bat` をCP932+CRLF+英字名に修正（UTF-8/日本語名のままだとcmd文字化け）
+- ✅ Step 1: ディレクトリ作成 / Step 2: ファイルコピー（インストーラー）
+- ❌ GUIインストーラーは Step 3 で `tkinter.TclError` により停止 → **手動インストールに切替**
+- ⏸️ Step 3: config.yaml 作成 — **ここで中断**（複数手法で失敗、最終方針は `config.example.yaml` コピー → メモ帳置換）
+- ✅ Step 4: service_account.json 配置
+- ✅ Step 5: venv作成 / Step 6: pip install
+- ❌ 動作テスト未実施、Step 7: NSSMサービス化 未着手
 
-1. **2026-04-14会議の議事録読込・分析**
-2. **Excel原価計算シートの全量解析**（98列、全計算式を抽出）
-3. **原価計算プロトタイプ計画書の作成**
+#### インストーラーのバグ2件を現場で発見（Phase 2修正対象）
+1. `_create_config_yaml` がバックグラウンドスレッドから `tkinter.StringVar.get()` を呼んで TclError（installer.py:1384-1393）
+2. インストール先とzip展開先が同じだと自己コピーで `WinError 32` 発生（重複検知未実装）
 
-### 次に予定しているタスク（次セッション）
-- **原価計算プロトタイプ Phase 2: Streamlit UI構築**（最優先）:
-  - `pip install streamlit` が必要
-  - 8タスク: サイドバー → 基本情報 → 単品一覧 → ギフト構成 → 計算結果 → 比較表 → Excel検証 → 統合
-  - worktree `.worktrees/proto-cost-calc` で作業継続
-  - 計画書: docs/2026-04-15_原価計算プロトタイプ計画書.md セクション5 Phase 2
-- **原価計算プロトタイプ Phase 3: 検証・デモ準備**（Phase 2後）
-- **業務改善の個別施策**（プロトタイプ後）:
-  - Phase A-01: 品番マスタのスプレッドシート初版整備
-- **tamatex Phase 2修正**（初回リリース後30日以内）
+### 前回の作業（2026-04-16 セッション5）
+1. **顧客請求金額の試算**: 推奨120-200万円（税別）、帳票生成は次フェーズ別見積
+2. **原価計算プロトタイプ Streamlit Cloudデプロイ**（セッション4）: `https://tamatex-proto-cost-calc-smtuk3y4wpamumnzmxib2p.streamlit.app/`
+
+### 次に予定しているタスク（次セッション＝現場導入再開）
+
+**最優先: tamatex 現場導入を完了させる**
+
+1. 現状の `C:\nas-googlesync\config\config.yaml` を `Get-Content` で確認
+2. `config.example.yaml` からコピー → メモ帳で2箇所置換:
+   - `Z:\\共有\\Excel` → `Z:\\`
+   - `drive_folder_id: ""` → `drive_folder_id: "1mIscR0MzvkIL7kVmEo5RgZHHUcEGdx--"`
+3. YAML構文チェック（PyYAML読み込みテスト）
+4. **Drive共有設定**（重要）: `service_account.json` の `client_email` をDriveフォルダに編集者権限で共有
+5. 動作テスト: `.\.venv\Scripts\python.exe -m tamatex.main -c .\config\config.yaml`
+6. 成功確認 → NSSMサービス化
+7. **サービス実行アカウントをLocalSystem→NAS認可ユーザーに変更**（でないとZ:が見えず詰む）
+8. PC再起動→自動起動テスト
+9. 事務員への運用引き継ぎ
+
+**その後（現場完了後）:**
+- インストーラーPhase 2修正: StringVarスレッド参照バグ、インストール先重複検知
+- 顧客への請求・見積書発行
+- 帳票生成機能（顧客回答待ち）
+- プロトタイプ残存課題（40FTテスト、io_fee/storage_fee設計矛盾）
+- Phase A-01: 品番マスタのスプレッドシート初版整備
 
 ### 未解決の問題・注意点
-- **未コミットの変更あり（masterブランチ）**: CLAUDE.md、システム仕様書.md
-- **未コミットの変更多数（master untracked）**: 会議議事録、提案書、原価計算Excel、計画書等
-- **40FTの検証未実施**: 20FT条件のみ検証済み。40FTは参考値扱い
-- **Excel原価計算の不明点4箇所**: 顧客確認が必要（計画書セクション8参照）
+- **🔴 現場導入中断中**: 現場PC側に `C:\nas-googlesync\config\config.yaml` が壊れた状態で残存している可能性。次回開始時は必ず現状確認から
+- **🔴 インストーラー重大バグ2件**: 次の現場導入までに修正必須（詳細はmemory `project_installer_known_bugs.md`）
+- **未コミットの変更多数（master）**: CLAUDE.md、システム仕様書.md、会議議事録、提案書、原価計算Excel、計画書、帳票分析PDF等
+- **プロトタイプ更新時の二重管理**: feature/proto-cost-calc → PCLAB-HUB/tamatex-proto-cost-calc
+- **40FTの検証未実施**: 20FT条件のみ検証済み
+- **Excel原価計算の不明点4箇所**: 顧客確認必要（計画書セクション8参照）
+- **帳票生成の不足情報**: 正式品番、上代、取引先名、素材・色・JAN（顧客回答待ち）
+- **Python環境が必須**: 現状のインストーラーはターゲットPCにPython 3.11+必要
+- **Google API実認証**: 現場で初回実施中、動作テスト未完了
+- **帳票生成に必要な不足情報**: 正式品番、上代、取引先名、素材・色・JAN（顧客回答待ち）
 - **Python環境が必須**: 現状のインストーラーはターゲットPCにPython 3.11+が必要
 - **Google API実認証は未テスト**: service_account.jsonがテスト環境にないため
