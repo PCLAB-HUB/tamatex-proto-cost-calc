@@ -2,3 +2,8 @@ openpyxl>=3.1.0
 gspread>=6.0.0
 google-auth>=2.25.0
 pyyaml>=6.0.1
+
+# Prototype UI (原価計算プロトタイプ / cost-calc-ui-revamp epic)
+streamlit-aggrid>=0.3.4
+plotly>=5.20
+streamlit-extras>=0.4
