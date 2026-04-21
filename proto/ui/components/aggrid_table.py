@@ -251,6 +251,6 @@ def create_aggrid(
         theme=theme,
         columns_auto_size_mode=ColumnsAutoSizeMode.FIT_CONTENTS,
         update_mode=GridUpdateMode.SELECTION_CHANGED,
-        data_return_mode=DataReturnMode.AS_INPUT_AND_FILTERED,
+        data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
         allow_unsafe_jscode=True,  # JS valueFormatter を使うため必須
     )
