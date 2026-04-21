@@ -38,28 +38,46 @@ from typing import Any, Literal
 import pandas as pd
 
 # streamlit-aggrid のインポート（Streamlit ランタイム外でのテスト時はモック不要）
-from st_aggrid import AgGrid, ColumnsAutoSizeMode, GridOptionsBuilder
+from st_aggrid import AgGrid, ColumnsAutoSizeMode, GridOptionsBuilder, JsCode
 from st_aggrid.shared import DataReturnMode, GridUpdateMode
 
 # ---- JavaScript フォーマッター -----------------------------------------------
+#
+# AG Grid の `valueFormatter` は文字列を受け取ると AG Grid の Expression として
+# 解釈し `new Function(...)` で評価するため、関数宣言は SyntaxError になる。
+# `JsCode` でラップすると streamlit-aggrid が grid options に特殊マーカーを
+# 付けて JS 関数として扱う。
 
-_YEN_FORMATTER = """
-function(params) {
-  if (params.value == null) return '';
-  return '¥' + Number(params.value).toLocaleString('ja-JP', {maximumFractionDigits: 0});
-}
-"""
-
-_PERCENT_FORMATTER_TEMPLATE = """
-function(params) {{
-  if (params.value == null) return '';
-  return Number(params.value).toFixed({decimals}) + '%';
-}}
-"""
-
-_NUMBER_FORMATTER_TEMPLATE = (
-    "function(params) {{ return Number(params.value).toFixed({decimals}); }}"
+_YEN_FORMATTER = JsCode(
+    """
+    function(params) {
+      if (params.value == null || params.value === '') return '';
+      return '¥' + Number(params.value).toLocaleString('ja-JP', {maximumFractionDigits: 0});
+    }
+    """
 )
+
+
+def _percent_formatter(decimals: int) -> JsCode:
+    return JsCode(
+        f"""
+        function(params) {{
+          if (params.value == null || params.value === '') return '';
+          return Number(params.value).toFixed({decimals}) + '%';
+        }}
+        """
+    )
+
+
+def _number_formatter(decimals: int) -> JsCode:
+    return JsCode(
+        f"""
+        function(params) {{
+          if (params.value == null || params.value === '') return '';
+          return Number(params.value).toFixed({decimals});
+        }}
+        """
+    )
 
 
 # ---- 列定義ヘルパ ------------------------------------------------------------
@@ -111,7 +129,7 @@ def percent_column(
         "field": field,
         "headerName": header,
         "type": ["numericColumn", "rightAligned"],
-        "valueFormatter": _PERCENT_FORMATTER_TEMPLATE.format(decimals=decimals),
+        "valueFormatter": _percent_formatter(decimals),
         "sortable": True,
         "filter": "agNumberColumnFilter",
     }
@@ -164,7 +182,7 @@ def number_column(
         "field": field,
         "headerName": header,
         "type": ["numericColumn", "rightAligned"],
-        "valueFormatter": _NUMBER_FORMATTER_TEMPLATE.format(decimals=decimals),
+        "valueFormatter": _number_formatter(decimals),
         "sortable": True,
         "filter": "agNumberColumnFilter",
     }
@@ -244,6 +262,11 @@ def create_aggrid(
 
     grid_options = gb.build()
 
+    # pandas 3.x + pyarrow で文字列列が LargeUtf8 型になり、
+    # st_aggrid 1.2.1 の JS デコーダ ("Unrecognized type: LargeUtf8")
+    # と互換性がないため、事前に utf8 (regular) にキャストする
+    df = _normalize_string_columns(df)
+
     return AgGrid(
         df,
         gridOptions=grid_options,
@@ -253,4 +276,39 @@ def create_aggrid(
         update_mode=GridUpdateMode.SELECTION_CHANGED,
         data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
         allow_unsafe_jscode=True,  # JS valueFormatter を使うため必須
+        # Arrow 経由のシリアライズを避けて JSON に固定
+        # (pandas 3.x の LargeUtf8 問題の二重防御)
+        use_json_serialization=True,
     )
+
+
+def _normalize_string_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """LargeUtf8 型の文字列列を通常の utf8 に変換して返す.
+
+    pandas 3.x + pyarrow では object 型や string 型の列が Arrow 変換時に
+    LargeUtf8 型（type id 20）になる。st_aggrid 1.2.1 のフロントエンドは
+    この型を認識できず "Unrecognized type: LargeUtf8" でレンダリングに
+    失敗する。
+
+    対策: 一度 Arrow テーブル化してから large_string を string にキャストし、
+    `types_mapper=pd.ArrowDtype` で戻すことで、pandas が ArrowDtype(string)
+    を保持し、st_aggrid の後続の Arrow 化でも utf8 が使われる。
+    """
+    import pyarrow as pa
+
+    try:
+        table = pa.Table.from_pandas(df, preserve_index=False)
+    except Exception:
+        return df
+
+    if not any(pa.types.is_large_string(f.type) for f in table.schema):
+        return df
+
+    new_fields = [
+        pa.field(f.name, pa.string()) if pa.types.is_large_string(f.type) else f
+        for f in table.schema
+    ]
+    try:
+        return table.cast(pa.schema(new_fields)).to_pandas(types_mapper=pd.ArrowDtype)
+    except Exception:
+        return df

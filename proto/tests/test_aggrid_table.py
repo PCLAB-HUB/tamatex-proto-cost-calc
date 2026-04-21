@@ -15,6 +15,17 @@ from proto.ui.components.aggrid_table import (
 )
 
 
+def _formatter_text(col: dict) -> str:
+    """valueFormatter の中身を文字列として取り出す（JsCode 対応）."""
+    vf = col.get("valueFormatter")
+    if vf is None:
+        return ""
+    # JsCode オブジェクトの場合は .js_code 属性から JS コードを取得
+    if hasattr(vf, "js_code"):
+        return vf.js_code
+    return str(vf)
+
+
 class TestCurrencyColumn:
     """currency_column のテスト."""
 
@@ -37,7 +48,7 @@ class TestCurrencyColumn:
     def test_yen_sign_in_formatter(self):
         """valueFormatter に円記号（¥）が含まれること."""
         result = currency_column("cost", "原価")
-        assert "¥" in result["valueFormatter"]
+        assert "¥" in _formatter_text(result)
 
     def test_width_included_when_specified(self):
         """width 指定時は dict に width キーが存在すること."""
@@ -61,17 +72,17 @@ class TestPercentColumn:
     def test_value_formatter_with_default_decimals(self):
         """デフォルト decimals=1 のとき toFixed(1) が formatter に含まれること."""
         result = percent_column("margin", "粗利率")
-        assert "toFixed(1)" in result["valueFormatter"]
+        assert "toFixed(1)" in _formatter_text(result)
 
     def test_value_formatter_with_custom_decimals(self):
         """decimals=2 のとき toFixed(2) が formatter に含まれること."""
         result = percent_column("margin", "粗利", decimals=2)
-        assert "toFixed(2)" in result["valueFormatter"]
+        assert "toFixed(2)" in _formatter_text(result)
 
     def test_percent_sign_in_formatter(self):
         """valueFormatter に '%' が含まれること."""
         result = percent_column("margin", "粗利率")
-        assert "%" in result["valueFormatter"]
+        assert "%" in _formatter_text(result)
 
     def test_right_aligned(self):
         """type に 'rightAligned' が含まれること."""
@@ -91,7 +102,7 @@ class TestPercentColumn:
     def test_decimals_zero(self):
         """decimals=0 のとき toFixed(0) が formatter に含まれること."""
         result = percent_column("margin", "粗利率", decimals=0)
-        assert "toFixed(0)" in result["valueFormatter"]
+        assert "toFixed(0)" in _formatter_text(result)
 
 
 class TestTextColumn:
@@ -135,12 +146,12 @@ class TestNumberColumn:
     def test_value_formatter_tofixed_zero(self):
         """decimals=0（デフォルト）のとき valueFormatter が toFixed(0) 形式であること."""
         result = number_column("count", "数量", decimals=0)
-        assert "toFixed(0)" in result["valueFormatter"]
+        assert "toFixed(0)" in _formatter_text(result)
 
     def test_value_formatter_tofixed_two(self):
         """decimals=2 のとき valueFormatter が toFixed(2) 形式であること."""
         result = number_column("weight", "重量", decimals=2)
-        assert "toFixed(2)" in result["valueFormatter"]
+        assert "toFixed(2)" in _formatter_text(result)
 
     def test_right_aligned(self):
         """type に 'rightAligned' が含まれること."""
@@ -166,4 +177,4 @@ class TestNumberColumn:
     def test_no_yen_sign_in_formatter(self):
         """純数値列のフォーマッターに円記号が含まれないこと."""
         result = number_column("count", "数量")
-        assert "¥" not in result["valueFormatter"]
+        assert "¥" not in _formatter_text(result)
