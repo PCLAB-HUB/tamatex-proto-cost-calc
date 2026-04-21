@@ -15,6 +15,13 @@ from proto.engine.models import (
     SingleItem,
     SingleItemResult,
 )
+from proto.ui.components.aggrid_table import (
+    create_aggrid,
+    currency_column,
+    number_column,
+    percent_column,
+    text_column,
+)
 
 
 def _composition_str(gift: GiftSet, items: dict[str, SingleItem]) -> str:
@@ -38,14 +45,14 @@ def _build_gift_overview_df(
         rows.append({
             "セット名": gift.name,
             "構成": _composition_str(gift, items),
-            "販売単価": f"{gift.selling_price:,.0f}",
-            "数量": f"{gift.sales_quantity:,}",
-            "見積単価": f"{r.quote_price:,.0f}",
-            "製造原価": f"{r.manufacturing_cost:,.2f}",
-            "粗利単価": f"{r.gross_profit:,.2f}",
-            "粗利率": f"{r.gross_profit_rate:.1%}",
-            "売上金額": f"{r.sales_amount:,.0f}",
-            "粗利金額": f"{r.profit_amount:,.0f}",
+            "販売単価": gift.selling_price,
+            "数量": gift.sales_quantity,
+            "見積単価": r.quote_price,
+            "製造原価": r.manufacturing_cost,
+            "粗利単価": r.gross_profit,
+            "粗利率": r.gross_profit_rate * 100,  # percent_column 用に %値に変換（例: 0.506 → 50.6）
+            "売上金額": r.sales_amount,
+            "粗利金額": r.profit_amount,
         })
     return pd.DataFrame(rows)
 
@@ -109,10 +116,23 @@ def render_gifts(
         results.append(calc_gift_set(gift, items, item_results, cond))
 
     # --- 概要テーブル ---
-    st.dataframe(
+    overview_columns = [
+        text_column("セット名", "セット名", width=160),
+        text_column("構成", "構成", width=280),
+        currency_column("販売単価", "販売単価"),
+        number_column("数量", "数量", decimals=0, width=80),
+        currency_column("見積単価", "見積単価"),
+        currency_column("製造原価", "製造原価"),
+        currency_column("粗利単価", "粗利単価"),
+        percent_column("粗利率", "粗利率", decimals=1),
+        currency_column("売上金額", "売上金額"),
+        currency_column("粗利金額", "粗利金額"),
+    ]
+    create_aggrid(
         _build_gift_overview_df(gifts, results, items),
-        use_container_width=True,
-        hide_index=True,
+        overview_columns,
+        selection="none",
+        height=400,
     )
 
     # --- 個別詳細 ---
