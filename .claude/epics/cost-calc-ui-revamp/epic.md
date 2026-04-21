@@ -1,9 +1,9 @@
 ---
 name: cost-calc-ui-revamp
-status: backlog
+status: in-progress
 created: 2026-04-21T01:54:31Z
-updated: 2026-04-21T02:19:25Z
-progress: 0%
+updated: 2026-04-21T02:30:00Z
+progress: 10%
 prd: .claude/prds/cost-calc-ui-revamp.md
 github: https://github.com/PCLAB-HUB/tamatex-proto-cost-calc/issues/1
 ---
