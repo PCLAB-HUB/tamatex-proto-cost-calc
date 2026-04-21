@@ -2,8 +2,8 @@
 name: cost-calc-ui-revamp
 status: in-progress
 created: 2026-04-21T01:54:31Z
-updated: 2026-04-21T02:30:00Z
-progress: 10%
+updated: 2026-04-21T02:50:00Z
+progress: 50%
 prd: .claude/prds/cost-calc-ui-revamp.md
 github: https://github.com/PCLAB-HUB/tamatex-proto-cost-calc/issues/1
 ---
@@ -218,11 +218,11 @@ CREATE INDEX idx_scenarios_updated ON scenarios(updated_at DESC);
 
 ## Tasks Created
 
-- [ ] #2 (2.md) - 依存ライブラリ追加と .gitignore 更新 (parallel: false, 0.5h)
-- [ ] #3 (3.md) - シナリオ永続化層の実装（SQLite + dataclass ⇄ JSON） (parallel: true, 4h)
-- [ ] #4 (4.md) - KPIカードコンポーネントの実装 (parallel: true, 2h)
-- [ ] #5 (5.md) - aggridテーブルファクトリの実装 (parallel: true, 2.5h)
-- [ ] #6 (6.md) - 為替感度チャートコンポーネントの実装 (parallel: true, 2h)
+- [x] #2 (2.md) - 依存ライブラリ追加と .gitignore 更新 (parallel: false, 0.5h)
+- [x] #3 (3.md) - シナリオ永続化層の実装（SQLite + dataclass ⇄ JSON） (parallel: true, 4h)
+- [x] #4 (4.md) - KPIカードコンポーネントの実装 (parallel: true, 2h)
+- [x] #5 (5.md) - aggridテーブルファクトリの実装 (parallel: true, 2.5h)
+- [x] #6 (6.md) - 為替感度チャートコンポーネントの実装 (parallel: true, 2h)
 - [ ] #7 (7.md) - ダッシュボードタブの実装 (parallel: true, 4h)
 - [ ] #8 (8.md) - シナリオタブと比較ビューの実装 (parallel: true, 6h)
 - [ ] #9 (9.md) - サイドバー改修（保存ボタン・折りたたみ整理） (parallel: true, 3h)
