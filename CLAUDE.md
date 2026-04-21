@@ -79,10 +79,9 @@ proto/                    # 原価計算プロトタイプ（feature/proto-cost-
 │   └── test_calc_summary.py
 └── app.py                # Streamlitエントリーポイント（5タブ構成）
 
-# プロトタイプ作業管理ファイル（プロジェクトルート）
-task_plan.md              # タスク一覧・進捗管理
-findings.md               # Excel解析結果
-progress.md               # セッションごとの作業記録
+# プロトタイプ作業管理ファイル（feature/proto-cost-calcブランチのみ）
+# task_plan.md / findings.md / progress.md はmasterには存在せず、
+# feature/proto-cost-calcのルート配下にのみ存在する
 ```
 
 ## 技術スタック
