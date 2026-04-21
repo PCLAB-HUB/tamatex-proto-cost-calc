@@ -2,8 +2,8 @@
 name: cost-calc-ui-revamp
 status: in-progress
 created: 2026-04-21T01:54:31Z
-updated: 2026-04-21T02:50:00Z
-progress: 50%
+updated: 2026-04-21T03:10:00Z
+progress: 90%
 prd: .claude/prds/cost-calc-ui-revamp.md
 github: https://github.com/PCLAB-HUB/tamatex-proto-cost-calc/issues/1
 ---
@@ -223,10 +223,10 @@ CREATE INDEX idx_scenarios_updated ON scenarios(updated_at DESC);
 - [x] #4 (4.md) - KPIカードコンポーネントの実装 (parallel: true, 2h)
 - [x] #5 (5.md) - aggridテーブルファクトリの実装 (parallel: true, 2.5h)
 - [x] #6 (6.md) - 為替感度チャートコンポーネントの実装 (parallel: true, 2h)
-- [ ] #7 (7.md) - ダッシュボードタブの実装 (parallel: true, 4h)
-- [ ] #8 (8.md) - シナリオタブと比較ビューの実装 (parallel: true, 6h)
-- [ ] #9 (9.md) - サイドバー改修（保存ボタン・折りたたみ整理） (parallel: true, 3h)
-- [ ] #10 (10.md) - 既存タブのaggrid化（単品・ギフト・比較） (parallel: true, 3h)
+- [x] #7 (7.md) - ダッシュボードタブの実装 (parallel: true, 4h)
+- [x] #8 (8.md) - シナリオタブと比較ビューの実装 (parallel: true, 6h)
+- [x] #9 (9.md) - サイドバー改修（保存ボタン・折りたたみ整理） (parallel: true, 3h)
+- [x] #10 (10.md) - 既存タブのaggrid化（単品・ギフト・比較） (parallel: true, 3h)
 - [ ] #11 (11.md) - app.py統合とsmoke test追加 (parallel: false, 2h)
 
 Total tasks: 10

@@ -48,6 +48,7 @@ from proto.ui.components.kpi_cards import (
     format_percentage,
     render_kpi_row,
 )
+from proto.ui.sidebar import apply_condition_to_session_state
 
 
 # ---------------------------------------------------------------------------
@@ -84,72 +85,14 @@ def _unique_copy_name(base_name: str, repo: ScenarioRepository) -> str:
 def _load_scenario_into_sidebar(loaded_cond: ImportCondition) -> None:
     """シナリオの ImportCondition をサイドバー widget の session_state に書き込む。
 
-    サイドバー（sidebar.py）の widget key 命名規約:
-        - コンテナ選択 radio の選択値を ``selected`` とする
-        - ``kp = selected.replace(" ", "_").replace("/", "_")``
-        - 各 widget key は ``f"{kp}_{field}"``
-
-    本関数は ``loaded_cond.name`` をそのまま ``selected`` として扱い、
-    対応する全 widget key を上書きする。
-
-    Note:
-        #9（サイドバー改修）が ``apply_condition_to_session_state()`` を
-        エクスポートした段階で、本関数をそれに切り替えることが望ましい。
-        インライン実装にしてあるのは並列実行の独立性を保つためである。
+    サイドバー側 (#9) の ``apply_condition_to_session_state()`` を呼び出して
+    全 widget key（基本12 + 輸入経費11×2 + コンテナradio = 35キー）を統一的に
+    復元する。単一ソース方式で sidebar.py と scenarios.py の重複を排除。
 
     Args:
         loaded_cond: 読み込むシナリオの輸入条件。
     """
-    kp = loaded_cond.name.replace(" ", "_").replace("/", "_")
-
-    # 為替
-    st.session_state[f"{kp}_internal_rate"] = loaded_cond.internal_rate
-    st.session_state[f"{kp}_current_rate"] = loaded_cond.current_rate
-
-    # マージン・ロス率・資材
-    st.session_state[f"{kp}_margin_pct"] = loaded_cond.margin_pct
-    st.session_state[f"{kp}_loss_rate_pct"] = loaded_cond.loss_rate_pct
-    st.session_state[f"{kp}_material_lot"] = loaded_cond.material_lot
-    st.session_state[f"{kp}_material_loss_pct"] = loaded_cond.material_loss_pct
-
-    # 輸入パラメータ
-    st.session_state[f"{kp}_freight"] = loaded_cond.overseas_freight_usd
-    st.session_state[f"{kp}_insurance"] = loaded_cond.insurance_rate
-    st.session_state[f"{kp}_tariff"] = loaded_cond.tariff_rate
-
-    # 物流
-    st.session_state[f"{kp}_io_fee"] = loaded_cond.io_fee
-    st.session_state[f"{kp}_storage_fee"] = loaded_cond.storage_fee
-    st.session_state[f"{kp}_storage_months"] = loaded_cond.storage_months
-
-    # 輸入経費 — 単品用 (prefix: {kp}_exp_s)
-    _exp_s = loaded_cond.import_expenses_single
-    st.session_state[f"{kp}_exp_s_cic_usd"] = _exp_s.cic_usd
-    st.session_state[f"{kp}_exp_s_cy"] = _exp_s.cy_charge
-    st.session_state[f"{kp}_exp_s_thc"] = _exp_s.thc
-    st.session_state[f"{kp}_exp_s_emc"] = _exp_s.emc
-    st.session_state[f"{kp}_exp_s_cic2"] = _exp_s.cic2
-    st.session_state[f"{kp}_exp_s_do"] = _exp_s.do_fee
-    st.session_state[f"{kp}_exp_s_doc"] = _exp_s.doc_fee
-    st.session_state[f"{kp}_exp_s_customs"] = _exp_s.customs_fee
-    st.session_state[f"{kp}_exp_s_handling"] = _exp_s.handling_fee
-    st.session_state[f"{kp}_exp_s_drayage"] = _exp_s.drayage
-    st.session_state[f"{kp}_exp_s_devanning"] = _exp_s.devanning
-
-    # 輸入経費 — ギフト用 (prefix: {kp}_exp_g)
-    _exp_g = loaded_cond.import_expenses_gift
-    st.session_state[f"{kp}_exp_g_cic_usd"] = _exp_g.cic_usd
-    st.session_state[f"{kp}_exp_g_cy"] = _exp_g.cy_charge
-    st.session_state[f"{kp}_exp_g_thc"] = _exp_g.thc
-    st.session_state[f"{kp}_exp_g_emc"] = _exp_g.emc
-    st.session_state[f"{kp}_exp_g_cic2"] = _exp_g.cic2
-    st.session_state[f"{kp}_exp_g_do"] = _exp_g.do_fee
-    st.session_state[f"{kp}_exp_g_doc"] = _exp_g.doc_fee
-    st.session_state[f"{kp}_exp_g_customs"] = _exp_g.customs_fee
-    st.session_state[f"{kp}_exp_g_handling"] = _exp_g.handling_fee
-    st.session_state[f"{kp}_exp_g_drayage"] = _exp_g.drayage
-    st.session_state[f"{kp}_exp_g_devanning"] = _exp_g.devanning
-
+    apply_condition_to_session_state(loaded_cond)
     st.toast(f"シナリオ '{loaded_cond.name}' を読み込みました")
 
 
