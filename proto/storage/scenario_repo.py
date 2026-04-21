@@ -81,7 +81,11 @@ class ScenarioRepository:
     def __init__(self, db_path: Path | str) -> None:
         self._db_path = Path(db_path)
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(self._db_path))
+        # check_same_thread=False: Streamlit は各スクリプト実行で別スレッドを生成するが、
+        # @st.cache_resource でシングルトン化した ScenarioRepository を再利用するため、
+        # 別スレッドからの使用を許可する必要がある。書き込みは Streamlit の単一スクリプト
+        # 実行フロー内で排他されるため、個別ロックは不要。
+        self._conn = sqlite3.connect(str(self._db_path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._init_schema()
 

@@ -95,7 +95,9 @@ def render_kpi_row(cards: list[KPICardData]) -> None:
     """複数KPIカードを横並びで描画する。
 
     `st.columns(len(cards))` で均等分割し、各カラムに1枚ずつ配置する。
-    全カードの描画後に `style_metric_cards()` で統一スタイルを適用する。
+    全カードの描画後に CSS を注入して、ライト/ダーク両テーマでラベルが
+    読めるよう色を明示する（streamlit-extras のデフォルトだとダーク
+    テーマ上で白×白になり判読不能になるため）。
 
     Args:
         cards: 表示するカードデータのリスト。空リスト時は何もしない。
@@ -104,9 +106,8 @@ def render_kpi_row(cards: list[KPICardData]) -> None:
         return
 
     import streamlit as st
-    from streamlit_extras.metric_cards import style_metric_cards
 
-    from proto.ui.components.styles import CARD_BACKGROUND, CARD_BORDER, CARD_BORDER_LEFT
+    from proto.ui.components.styles import CARD_BORDER_LEFT
 
     cols = st.columns(len(cards))
     for col, card in zip(cols, cards):
@@ -119,10 +120,26 @@ def render_kpi_row(cards: list[KPICardData]) -> None:
                 delta_color=card.delta_color,
             )
 
-    style_metric_cards(
-        background_color=CARD_BACKGROUND,
-        border_left_color=CARD_BORDER_LEFT,
-        border_color=CARD_BORDER,
+    # カスタム CSS: Streamlit のデフォルトテーマを尊重しつつ、
+    # カード枠とアクセントだけ付与する（ラベル色は Streamlit 標準に任せる）
+    st.markdown(
+        f"""
+        <style>
+        div[data-testid="stMetric"] {{
+            background-color: rgba(128, 128, 128, 0.08);
+            border: 1px solid rgba(128, 128, 128, 0.2);
+            border-left: 4px solid {CARD_BORDER_LEFT};
+            padding: 16px 18px;
+            border-radius: 6px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }}
+        div[data-testid="stMetricLabel"] {{
+            font-weight: 600;
+            opacity: 0.85;
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True,
     )
 
 
