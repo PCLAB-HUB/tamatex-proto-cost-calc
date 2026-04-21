@@ -1,9 +1,9 @@
 ---
 name: cost-calc-ui-revamp
-status: in-progress
+status: completed
 created: 2026-04-21T01:54:31Z
-updated: 2026-04-21T03:10:00Z
-progress: 90%
+updated: 2026-04-21T03:25:00Z
+progress: 100%
 prd: .claude/prds/cost-calc-ui-revamp.md
 github: https://github.com/PCLAB-HUB/tamatex-proto-cost-calc/issues/1
 ---
@@ -227,7 +227,7 @@ CREATE INDEX idx_scenarios_updated ON scenarios(updated_at DESC);
 - [x] #8 (8.md) - シナリオタブと比較ビューの実装 (parallel: true, 6h)
 - [x] #9 (9.md) - サイドバー改修（保存ボタン・折りたたみ整理） (parallel: true, 3h)
 - [x] #10 (10.md) - 既存タブのaggrid化（単品・ギフト・比較） (parallel: true, 3h)
-- [ ] #11 (11.md) - app.py統合とsmoke test追加 (parallel: false, 2h)
+- [x] #11 (11.md) - app.py統合とsmoke test追加 (parallel: false, 2h)
 
 Total tasks: 10
 Parallel tasks: 8
