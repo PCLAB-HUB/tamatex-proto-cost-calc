@@ -131,94 +131,91 @@ python scripts/initial_setup.py
 
 ## 現在の作業状態
 
-### 直近の作業（2026-04-21 セッション7 — プロトタイプUI大改修エピック完了）
+### 直近の作業（2026-04-24 セッション8 — tamatex 現場導入完遂）
 
-**原価計算プロトタイプの UI 大改修を CCPM で実行し完了。ただし Streamlit Cloud（main）反映は未実施**。
+**4-16 から棚上げ中だった tamatex 現場導入を SSH 経由で完遂。NSSM サービス化・自動同期まで到達**。
 
-#### 前半: プロジェクト整理 + CCPM 計画
-- `docs/cost-calc/` サブフォルダ隔離でプロトタイプ資料を tamatex 本体と分離（master commit `9afe965`）
-- ルートの作業管理ファイル（task_plan.md 等）を `feature/proto-cost-calc` に移管（master commit `0bbf093`）
-- `PCLAB-HUB/tamatex-proto-cost-calc` を origin に設定
-- CCPM で PRD → Epic → 10 タスクに分解、GitHub に Epic #1 + 10 sub-issues（#2〜#11）作成
+#### セッション開始時点の状況
+- 前セッション（4-16）で config.yaml 作成途中で中断
+- 現場 PC (`DESKTOP-3TM1PKS` / Tailscale `100.124.181.55`) へは SSH 鍵認証で接続可能（User アカウント、Administrator 権限あり）
+- Python 3.14.4 venv + tamatex 0.1.0 + 依存パッケージは 4-16 時点でインストール済み
+- config.yaml は存在、`drive_folder_id: 1mIscR0MzvkIL7kVmEo5RgZHHUcEGdx--` を指していた（個人ドライブ想定）
+- service_account.json 配置済み（`tamatex-sync@tamatex.iam.gserviceaccount.com`）
+- 4-16 ログに `403: Drive storage quota has been exceeded` が残っていた
 
-#### 後半: 並列エージェント実行 + ランタイムバグ修正
-- **Phase 2 (4並列 Sonnet)**: 依存永続化層・KPIカード・aggridファクトリ・為替感度チャートを同時実装
-- **Phase 3 (4並列 Sonnet)**: ダッシュボード・シナリオタブ・サイドバー改修・既存タブaggrid化を同時実装
-- **Phase 4 (1 Sonnet)**: app.py 統合 + smoke test
-- 各フェーズ完了後メインセッションで consolidation、GitHub issue クローズ、epic.md 更新
-- **ランタイムバグ 5 件を発見・修正**（ブラウザ実機検証で全発覚）:
-  1. `DataReturnMode.AS_INPUT_AND_FILTERED` 廃止 → `FILTERED_AND_SORTED`
-  2. `sqlite3.ProgrammingError` スレッド越境 → `check_same_thread=False`
-  3. KPIカード白×白 判読不能 → 自前CSS
-  4. aggrid `LargeUtf8` 未対応 → `_normalize_string_columns` + `use_json_serialization=True`
-  5. aggrid `valueFormatter` 関数文字列 SyntaxError → `JsCode` ラッパー
-- 詳細は memory `reference_streamlit_aggrid_gotchas.md`
+#### 今回の作業フロー
+1. **点検フェーズ**: SSH 経由で UTF-8 エンコードで config.yaml・ログ・Python 環境・NSSM 存在確認
+2. **Google 側再構成**: 顧客が新しく取得した組織アカウント `info816@g.tamatex.jp` 配下に共有ドライブを作成、同期先フォルダを作成（ID `1HaBKW0-Hvctu7o7KlCyU3c88z9RtxDYb`）、サービスアカウントを「コンテンツ管理者」として招待
+3. **config.yaml 差し替え**: `drive_folder_id` を新フォルダIDに更新、UTF-8 保持
+4. **NAS 認証設計**: SSH (Network logon) からは `cmdkey` 不可、`net use` でセッション認証可能と判明。パスワードは `Tm1225` → `tm1225`（小文字）が正解
+5. **tamatex 本体改修**: 
+   - `src/tamatex/nas_auth.py` を新規追加（subprocess で `net use` を起動時に実行）
+   - `src/tamatex/config.py` に `NasAuthConfig` 追加
+   - `src/tamatex/main.py` で `authenticate_nas()` を起動時呼び出し
+   - `config/config.example.yaml` にサンプル追記
+   - `tests/test_nas_auth.py` 6件追加（113/113 全PASS）
+   - **commit `c1c4184`**: `feat: NAS SMB自己認証機能を追加（サービス実行対応）`
+6. **現場デプロイ**: 修正した 3 ファイル（config.py / main.py / nas_auth.py）を scp で site-packages に反映、config.yaml に `nas.auth` セクションを追加
+7. **統合テスト**: `test_one_cycle.py` で初回同期成功（`scanned=4 synced=4 errors=0`、37シート作成）、2回目は `skipped=4`（変更検知正常）
+8. **NSSM サービス化**: `nssm-2.24.zip` をダウンロード → `C:\nas-googlesync\bin\nssm.exe` に配置 → `tamatex` サービスを **LocalSystem** で登録（Start=Automatic, AppRestartDelay=30s）
+9. **稼働確認**: 10:34:59 と 10:49:59 の2サイクル連続で正常動作、tamatex 自身がサービスコンテキストで `net use` 認証成功
+10. **クリーンアップ**: 現場 PC の一時テストスクリプト類を削除（config.yaml バックアップは残置）
 
-#### 成果物
-- **232 テスト全 PASS**（既存131 + 新規101）
-- 7タブ UI: ダッシュボード / 基本情報 / 単品タオル / ギフトセット / 比較一覧 / シナリオ / Excel検証
-- シナリオ管理: SQLite 永続化 + 2件横並び比較
-- `feature/proto-cost-calc` を origin に push 済（44 commits ahead of origin/main）
-- **main へのマージは未実施** → Streamlit Cloud 反映は次回
+#### 最終稼働構成
+- サービス `tamatex`: Running / Automatic / LocalSystem / python.exe (PID稼働中, 53MB)
+- ログ: `C:\nas-googlesync\logs\tamatex.log`（UTF-8, 10MB×5ローテーション）
+- 15分間隔で自動同期中、エラー・警告ゼロ
 
-### 棚上げ中の作業（2026-04-16 セッション6 — tamatex 現場導入）
+### 未解決の問題・注意点
 
-**現場導入は config.yaml 作成途中で中断**。プロトタイプ改修が優先された形。次回再開で必要な情報は memory `project_onsite_deploy_20260416.md` に集約:
-- インストール先 `C:\nas-googlesync`、NAS `Z:\` マップ済
-- Drive folder ID: `1mIscR0MzvkIL7kVmEo5RgZHHUcEGdx--`
-- Step 1-2, 4-6 完了 / Step 3 config.yaml 作成で中断 / Step 7 NSSM 未着手
-- インストーラー Phase 2 修正必要（StringVar スレッドバグ + インストール先重複検知）
+#### tamatex 現場導入（運用フェーズ）
+- **🟡 share_with 未設定**: 営業・役員メールを顧客から受領後、config.yaml に追記 → `nssm restart tamatex`
+- **🟡 Windows再起動時の自動起動未検証**: `StartType=Automatic` 設定済だが、再起動タイミングで `Get-Service tamatex` 確認要
+- **🟡 実運用テスト未完了**: 事務員が通常業務で Excel 更新 → 最大15分以内に Sheets 反映することを顧客確認
+- **🟡 config.yaml に NAS パスワード平文**: Windows ACL での保護を追加検討（icacls で Administrators+SYSTEM のみに制限）
+
+#### 現場 PC の保全ファイル（クリーンアップ対象外）
+- `C:\nas-googlesync\config\config.yaml.bak_before_shareddrive`（設定変更前のバックアップ、監査証跡として残置）
+- `C:\nas-googlesync\logs\tamatex.log.pre_*`（各テストサイクル前のログスナップショット）
+
+#### プロトタイプ関連（前セッションから継続）
+- **🟠 main マージ未実施**: `feature/proto-cost-calc` は 44 commits ahead of `PCLAB-HUB/tamatex-proto-cost-calc/main`
+- **🟠 シナリオ比較 E2E 未自動検証**: claude-in-chrome では aggrid iframe のチェックボックス選択が Streamlit に伝播しない
+- **pandas 3.x + streamlit-aggrid 1.2.1 互換性**: 対策を `aggrid_table.py` に実装済
+
+#### 共通・後続
+- **インストーラー Phase 2 修正**（StringVar スレッドバグ + インストール先重複未検知、project_installer_known_bugs.md）
+- **顧客への請求・見積書発行**
+- **帳票生成機能**（顧客回答待ち）
+- **Excel 原価計算の不明点4箇所**（顧客確認必要）
+- **Phase A-01: 品番マスタのスプレッドシート初版整備**
 
 ### 次に予定しているタスク（優先度順）
 
-**🔴 最優先: プロトタイプ main マージ + 現場デモ**
-1. `feature/proto-cost-calc` → `PCLAB-HUB/tamatex-proto-cost-calc` の `main` に PR 作成 or 直接 push
-   - PR URL: `https://github.com/PCLAB-HUB/tamatex-proto-cost-calc/pull/new/feature/proto-cost-calc`
-2. Streamlit Cloud でビルド成功確認（追加 3 ライブラリ: streamlit-aggrid, plotly, streamlit-extras）
-3. 顧客（社長・役員）への新UIデモ実施
+**🟠 短期（次回セッション直後にやる）**
+1. 現場 `tamatex` サービスの継続稼働確認（数時間〜1日後、ログに連続した15分サイクル記録）
+2. 実運用テスト（事務員 Excel 更新 → Sheets 反映確認）
+3. 顧客から受領次第、`share_with` に営業・役員メール追加 → `nssm restart tamatex`
 
-**🟠 手動 E2E 確認（自動テストで制約あり）**
-- シナリオ 2件選択→「📊 比較」ボタンの活性化と比較ビュー描画
-- シナリオ CRUD（読込/複製/リネーム/削除）
-- サイドバー条件変更→全タブの連動更新
-
-**🟡 現場導入再開（tamatex 本体、別プロジェクト扱い）**
-- 現場 PC 側 `C:\nas-googlesync\config\config.yaml` の現状確認
-- `config.example.yaml` コピー → メモ帳置換 → PyYAML で構文チェック
-- Drive 共有設定 → 動作テスト → NSSM サービス化
-- サービス実行アカウントを NAS 認可ユーザーに変更（LocalSystem では Z: が見えない）
+**🔴 中期: プロトタイプ main マージ + 現場デモ**
+1. `feature/proto-cost-calc` → `PCLAB-HUB/tamatex-proto-cost-calc/main` に PR/push
+2. Streamlit Cloud でビルド成功確認
+3. 顧客（社長・役員）への新UIデモ
 
 **🟢 後続課題**
 - インストーラー Phase 2 修正
 - 顧客への請求・見積書発行
-- 帳票生成機能（顧客回答待ち）
+- 帳票生成機能
 - プロトタイプ残存課題（40FT テスト、io_fee/storage_fee 設計矛盾、上代 delta 常に ±¥0）
-- Phase A-01: 品番マスタのスプレッドシート初版整備
 
-### 未解決の問題・注意点
+### 未コミットの変更（master）
 
-#### プロトタイプ関連
-- **🟠 main マージ未実施**: `feature/proto-cost-calc` は 44 commits ahead。次回セッションで即 push/PR
-- **🟠 シナリオ比較 E2E 未自動検証**: claude-in-chrome では aggrid iframe のチェックボックス選択が Streamlit に伝播しない（memory `reference_streamlit_browser_automation.md` 参照）
-- **🟠 最初のテスト保存で名前重複** (id=1 が「標準_USD150scenario_USD150」): 自動テスト中の入力操作起因、実運用では問題なし。必要なら DELETE 文で id=1 を削除
-- **requirements.txt 注意**: worktree 側は tamatex 本体デップのみ。origin/main 側は streamlit/pandas を含む別 requirements.txt。Cloud デプロイ時は origin/main 側が使われる
-- **pandas 3.x + streamlit-aggrid 1.2.1 互換性**: 既知の互換性問題に対する対策を `aggrid_table.py` に実装済（`_normalize_string_columns` + `JsCode` + `use_json_serialization=True`）
+前セッション由来で残っているもの:
+- `M docs/システム仕様書.md`（軽微な編集）
+- `?? docs/2026-04-07_会議要約.md` / `docs/2026-04-07_会議議事録.md`
+- `?? docs/業務改善提案書.pdf`
+- `?? scripts/generate_document_feasibility_pdf.py` / `generate_proposal_pdf.py`
+- `?? setup.bat`（現場導入用、前セッション作成）
+- `?? src/tamatex.egg-info/`（ビルド成果物、.gitignore 候補）
 
-#### tamatex 本体（棚上げ中）
-- **🔴 現場導入中断中**: 現場 PC `C:\nas-googlesync\config\config.yaml` が壊れた状態で残存している可能性
-- **🔴 インストーラー重大バグ2件**: 次の現場導入までに修正必須
-- **Python 環境必須**: 現状のインストーラーは Python 3.11+ が必要
-- **Google API 実認証**: 現場で初回実施中、動作テスト未完了
-
-#### 共通
-- **プロトタイプ更新時の二重管理**: feature/proto-cost-calc → PCLAB-HUB/tamatex-proto-cost-calc（別repoデプロイ先）
-- **Excel 原価計算の不明点4箇所**: 顧客確認必要（計画書セクション8参照）
-- **帳票生成の不足情報**: 正式品番、上代、取引先名、素材・色・JAN（顧客回答待ち）
-- **未コミットの変更（master）**: 前セッション由来で残っているもの:
-  - `M docs/システム仕様書.md`（軽微な編集）
-  - `?? docs/2026-04-07_会議要約.md` / `docs/2026-04-07_会議議事録.md`
-  - `?? docs/業務改善提案書.pdf`
-  - `?? scripts/generate_document_feasibility_pdf.py` / `generate_proposal_pdf.py`
-  - `?? setup.bat`（現場導入用、前セッション作成）
-  - `?? src/tamatex.egg-info/`（ビルド成果物、.gitignore 候補）
-- **未コミットの変更（feature/proto-cost-calc）**: なし（全commit済 + origin push済）
+feature/proto-cost-calc 側: なし（全commit済 + origin push済）
