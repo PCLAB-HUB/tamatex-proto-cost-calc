@@ -7,10 +7,19 @@ import yaml
 
 
 @dataclass(frozen=True)
+class NasAuthConfig:
+    """NAS の SMB 認証情報（Windows向け）。省略可。サービス実行時に net use で認証を確立する。"""
+    server: str
+    username: str
+    password: str
+
+
+@dataclass(frozen=True)
 class NasConfig:
     base_path: str
     file_patterns: list[str] = field(default_factory=lambda: ["*.xlsx"])
     exclude_patterns: list[str] = field(default_factory=lambda: ["~$*", "*.tmp", ".~lock*"])
+    auth: NasAuthConfig | None = None
 
 
 @dataclass(frozen=True)
@@ -62,8 +71,11 @@ def load_config(path: str | Path) -> AppConfig:
         if not google_data:
             raise ValueError(f"設定ファイルに 'google' セクションがありません: {config_path}")
 
+        auth_data = nas_data.pop("auth", None)
+        nas_auth = NasAuthConfig(**auth_data) if auth_data else None
+
         return AppConfig(
-            nas=NasConfig(**nas_data),
+            nas=NasConfig(auth=nas_auth, **nas_data),
             google=GoogleConfig(**google_data),
             sync=SyncConfig(**data.get("sync", {})),
             logging=LogConfig(**data.get("logging", {})),

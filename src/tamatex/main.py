@@ -13,6 +13,7 @@ from tamatex import __version__
 from tamatex.config import load_config, AppConfig
 from tamatex.excel_reader import read_workbook
 from tamatex.logger import setup_logger
+from tamatex.nas_auth import authenticate_nas
 from tamatex.sheets_sync import authenticate, create_spreadsheet, sync_workbook
 from tamatex.state import StateDB
 from tamatex.watcher import scan_files, detect_changes
@@ -133,6 +134,14 @@ def run(config_path: str | Path) -> None:
     logger.info("=== tamatex 起動 (v%s) ===", __version__)
     logger.info("NASパス: %s", config.nas.base_path)
     logger.info("同期間隔: %d分", config.sync.interval_minutes)
+
+    # NAS SMB認証（サービス実行時に必須、GUIセッションのcredentialキャッシュに依存しない）
+    if config.nas.auth is not None:
+        authenticate_nas(
+            config.nas.auth.server,
+            config.nas.auth.username,
+            config.nas.auth.password,
+        )
 
     # 状態DB初期化（絶対パスで解決）
     if config.sync.state_db_path:

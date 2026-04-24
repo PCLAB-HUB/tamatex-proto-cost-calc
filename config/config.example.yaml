@@ -8,6 +8,13 @@ nas:
     - "~$*"
     - "*.tmp"
     - ".~lock*"
+  # SMB認証（Windowsサービスで動かす場合に必須。対話ログインユーザーの
+  # credentialキャッシュを共有できないため、明示的に認証を渡す）。
+  # 省略可（GUIユーザーのキャッシュに頼る場合など）。
+  # auth:
+  #   server: "Tamatex-nas8tb"
+  #   username: "admin"
+  #   password: "your-nas-password"
 
 google:
   # サービスアカウントのJSONキーファイルパス
