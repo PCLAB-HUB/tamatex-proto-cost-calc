@@ -1,26 +1,39 @@
-"""メインモジュール。同期サイクルの実行とスケジューリング。"""
+"""メインモジュール。同期サイクルの実行とスケジューリング。
+
+同期先フォルダ配下に Sheets/ と PDF/ のサブフォルダを自動作成し、
+同名ファイルをそれぞれに配置する。既存ファイルは fileId 維持のまま
+中身と配置場所を更新するため、URL は不変。
+"""
 
 import argparse
 import atexit
 import logging
 import signal
-import sys
 import threading
-import time
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from tamatex import __version__
-from tamatex.config import load_config, AppConfig
-from tamatex.excel_reader import read_workbook
+from tamatex.config import AppConfig, load_config
+from tamatex.drive_utils import (
+    apply_share,
+    build_drive_service,
+    ensure_folder_path,
+    ensure_subfolder,
+    move_to_folder,
+)
 from tamatex.logger import setup_logger
 from tamatex.nas_auth import authenticate_nas
-from tamatex.sheets_sync import authenticate, create_spreadsheet, sync_workbook
+from tamatex.pdf_sync import upsert_pdf
+from tamatex.sheets_sync import upsert_sheet
 from tamatex.state import StateDB
-from tamatex.watcher import scan_files, detect_changes
+from tamatex.watcher import detect_changes, scan_files
 
 logger = logging.getLogger("tamatex")
 
-# グレースフルシャットダウン用イベント
+SHEETS_SUBFOLDER = "Sheets"
+PDF_SUBFOLDER = "PDF"
+
 _shutdown_event = threading.Event()
 
 
@@ -29,15 +42,107 @@ def _handle_signal(signum, frame):
     _shutdown_event.set()
 
 
+def _subfolder_parts(file_path: str, base_path: str) -> list[str]:
+    """NAS の絶対パスから base_path を除いた、親ディレクトリの階層パーツを返す。
+
+    例: base="/nas/data", file="/nas/data/テスト/foo.xlsx" → ["テスト"]
+    例: base="/nas/data", file="/nas/data/foo.xlsx"        → []
+    """
+    try:
+        rel = Path(file_path).relative_to(Path(base_path))
+    except ValueError:
+        # base_path 外（通常起きない、watcher がガード済み）
+        return []
+    return list(rel.parent.parts)
+
+
+def _resolve_target_folders(
+    service,
+    file_path: str,
+    config: AppConfig,
+    sheets_root_id: str,
+    pdf_root_id: str,
+    cache: dict[tuple[str, ...], tuple[str, str]],
+) -> tuple[str, str]:
+    """ファイルの NAS 配置から、対応する Drive 上の Sheets/PDF サブフォルダIDを返す。
+
+    mirror_subfolders が False ならルート直下を返す。
+    cache はサイクル内でフォルダ ID を再利用してAPI呼出を削減する。
+    """
+    if not config.sync.mirror_subfolders:
+        return sheets_root_id, pdf_root_id
+
+    parts = _subfolder_parts(file_path, config.nas.base_path)
+    if not parts:
+        return sheets_root_id, pdf_root_id
+
+    key = tuple(parts)
+    if key in cache:
+        return cache[key]
+
+    sheets_target = ensure_folder_path(service, sheets_root_id, parts)
+    pdf_target = ensure_folder_path(service, pdf_root_id, parts)
+    cache[key] = (sheets_target, pdf_target)
+    return cache[key]
+
+
+def reorganize_existing_files(
+    config: AppConfig,
+    state_db: StateDB,
+    service,
+    sheets_root_id: str,
+    pdf_root_id: str,
+) -> int:
+    """state.db に登録済みの全ファイルを、NAS階層に対応するDriveサブフォルダへ再配置する。
+
+    起動時に1回呼ぶ想定。fileId は維持されるため URL は不変。
+    既に正しい場所にあるファイルは move_to_folder 内でスキップされる。
+    Returns: 移動した（または確認した）ファイル数。
+    """
+    if not config.sync.mirror_subfolders:
+        return 0
+
+    cache: dict[tuple[str, ...], tuple[str, str]] = {}
+    moved = 0
+    for state in state_db.get_all_states():
+        parts = _subfolder_parts(state.file_path, config.nas.base_path)
+        if not parts:
+            continue  # ルート直下、移動不要
+
+        key = tuple(parts)
+        if key in cache:
+            sheets_target, pdf_target = cache[key]
+        else:
+            sheets_target = ensure_folder_path(service, sheets_root_id, parts)
+            pdf_target = ensure_folder_path(service, pdf_root_id, parts)
+            cache[key] = (sheets_target, pdf_target)
+
+        try:
+            if state.spreadsheet_id:
+                move_to_folder(service, state.spreadsheet_id, sheets_target)
+            if state.pdf_file_id:
+                move_to_folder(service, state.pdf_file_id, pdf_target)
+            moved += 1
+        except Exception as e:
+            logger.warning(
+                "再配置失敗（続行）: %s - %s",
+                Path(state.file_path).name, e,
+            )
+    return moved
+
+
 def sync_cycle(
     config: AppConfig,
     state_db: StateDB,
-    client,
+    service,
+    sheets_folder_id: str,
+    pdf_folder_id: str,
     shutdown_event: threading.Event | None = None,
 ) -> dict:
     """1回の同期サイクルを実行する。"""
     _event = shutdown_event or _shutdown_event
     stats = {"scanned": 0, "synced": 0, "errors": 0, "skipped": 0}
+    folder_cache: dict[tuple[str, ...], tuple[str, str]] = {}
 
     # 1. NASフォルダをスキャン
     try:
@@ -58,63 +163,102 @@ def sync_cycle(
 
     # 2. 変更を検知
     changes = detect_changes(current_files, state_db)
+    files_to_sync = list(changes.new_files) + list(changes.modified_files)
 
-    files_to_sync = changes.new_files + changes.modified_files
+    # 2b. PDF未生成のファイルも同期対象に含める（旧版からのアップグレード初回対応）
+    synced_paths = {f.path for f in files_to_sync}
+    for file_info in current_files:
+        if file_info.path in synced_paths:
+            continue
+        state = state_db.get_state(file_info.path)
+        if state and not state.pdf_file_id:
+            files_to_sync.append(file_info)
+            logger.info(
+                "PDF未生成のため同期対象に追加: %s",
+                Path(file_info.path).name,
+            )
+
     if not files_to_sync:
         logger.info("変更なし — スキップ")
         stats["skipped"] = stats["scanned"]
         return stats
 
+    stats["skipped"] = stats["scanned"] - len(files_to_sync)
+
     # 3. 変更ファイルを同期
     for file_info in files_to_sync:
         if _event.is_set():
             logger.info("シャットダウン要求のため同期中断")
-            stats["skipped"] += len(files_to_sync) - stats["synced"] - stats["errors"]
             break
 
         file_path = file_info.path
         file_name = Path(file_path).stem
-        is_new = file_info in changes.new_files
 
         try:
-            # Excel読み取り
-            workbook_data = read_workbook(file_path)
-
-            # スプレッドシートの取得 or 作成
             state = state_db.get_state(file_path)
-            if state and state.spreadsheet_id:
-                spreadsheet_id = state.spreadsheet_id
-            else:
-                # 新規作成
-                spreadsheet_id = create_spreadsheet(
-                    client,
-                    title=f"[同期] {file_name}",
-                    folder_id=config.google.drive_folder_id,
-                    share_with=config.google.share_with,
-                )
+            existing_sheet_id = state.spreadsheet_id if state else ""
+            existing_pdf_id = state.pdf_file_id if state else ""
 
-            # 同期実行
-            sync_workbook(client, workbook_data, spreadsheet_id)
+            # NAS階層に対応する Drive 上のサブフォルダ ID を解決
+            sheets_target, pdf_target = _resolve_target_folders(
+                service, file_path, config,
+                sheets_folder_id, pdf_folder_id, folder_cache,
+            )
+
+            # Sheets: xlsx 変換アップロード（既存fileId維持、フォルダ矯正）
+            sheet_title = f"[同期] {file_name}"
+            sheet_id = upsert_sheet(
+                service,
+                xlsx_path=file_path,
+                title=sheet_title,
+                folder_id=sheets_target,
+                existing_file_id=existing_sheet_id,
+            )
+
+            # 共有設定を冪等適用（失敗しても同期本体は継続）
+            try:
+                apply_share(service, sheet_id, config.google.share_with)
+            except Exception as e:
+                logger.warning("Sheets共有設定でエラー（続行）: %s - %s", sheet_id, e)
+
+            # PDF: Sheetsから export して保存
+            pdf_title = f"{file_name}.pdf"
+            pdf_id = upsert_pdf(
+                service,
+                sheet_file_id=sheet_id,
+                title=pdf_title,
+                folder_id=pdf_target,
+                existing_pdf_id=existing_pdf_id,
+            )
+            try:
+                apply_share(service, pdf_id, config.google.share_with)
+            except Exception as e:
+                logger.warning("PDF共有設定でエラー（続行）: %s - %s", pdf_id, e)
 
             # 状態更新
             state_db.update_state(
                 file_path=file_path,
                 mtime=file_info.mtime,
                 file_hash=file_info.file_hash,
-                spreadsheet_id=spreadsheet_id,
+                spreadsheet_id=sheet_id,
+                pdf_file_id=pdf_id,
             )
 
-            action = "新規同期" if is_new else "更新同期"
-            logger.info("%s完了: %s → %s", action, file_name, spreadsheet_id)
+            logger.info(
+                "同期完了: %s → Sheets=%s PDF=%s",
+                file_name, sheet_id, pdf_id,
+            )
             stats["synced"] += 1
 
         except Exception as e:
             logger.error("同期失敗（スキップ）: %s - %s", file_name, e, exc_info=True)
             stats["errors"] += 1
 
-    # 4. 削除されたファイルの記録（スプレッドシートは残す）
+    # 4. NAS上から削除されたファイル — Drive側は保持、状態のみ除去
     for deleted_path in changes.deleted_paths:
-        logger.warning("NAS上から削除検知: %s（スプレッドシートは保持）", deleted_path)
+        logger.warning(
+            "NAS上から削除検知: %s（Drive上のSheets/PDFは保持）", deleted_path
+        )
         state_db.remove_state(deleted_path)
 
     return stats
@@ -124,18 +268,19 @@ def run(config_path: str | Path) -> None:
     """メインループ。設定読み込み → 認証 → 定期同期。"""
     _shutdown_event.clear()
 
-    # シグナルハンドラ登録
     signal.signal(signal.SIGINT, _handle_signal)
     signal.signal(signal.SIGTERM, _handle_signal)
 
-    # 設定読み込み
     config = load_config(config_path)
     setup_logger(config.logging)
     logger.info("=== tamatex 起動 (v%s) ===", __version__)
     logger.info("NASパス: %s", config.nas.base_path)
-    logger.info("同期間隔: %d分", config.sync.interval_minutes)
+    if config.sync.mode == "times":
+        logger.info("同期スケジュール: 時刻指定 %s", config.sync.times)
+    else:
+        logger.info("同期間隔: %d分", config.sync.interval_minutes)
 
-    # NAS SMB認証（サービス実行時に必須、GUIセッションのcredentialキャッシュに依存しない）
+    # NAS SMB認証（サービス実行時に必須）
     if config.nas.auth is not None:
         authenticate_nas(
             config.nas.auth.server,
@@ -143,7 +288,7 @@ def run(config_path: str | Path) -> None:
             config.nas.auth.password,
         )
 
-    # 状態DB初期化（絶対パスで解決）
+    # 状態DB初期化
     if config.sync.state_db_path:
         db_path = Path(config.sync.state_db_path)
     else:
@@ -152,30 +297,90 @@ def run(config_path: str | Path) -> None:
     atexit.register(state_db.close)
     logger.info("状態DB: %s", db_path)
 
-    # Google API認証
-    client = authenticate(config.google.credentials_path)
+    # Google Drive API 認証
+    service = build_drive_service(config.google.credentials_path)
 
-    interval_sec = config.sync.interval_minutes * 60
+    # サブフォルダ Sheets/ PDF/ を確保
+    sheets_folder_id = ensure_subfolder(
+        service, config.google.drive_folder_id, SHEETS_SUBFOLDER
+    )
+    pdf_folder_id = ensure_subfolder(
+        service, config.google.drive_folder_id, PDF_SUBFOLDER
+    )
+    logger.info("Sheetsフォルダ: %s", sheets_folder_id)
+    logger.info("PDFフォルダ  : %s", pdf_folder_id)
 
-    # 初回同期を即座に実行
-    _run_sync_cycle(config, state_db, client)
+    # NAS のサブフォルダ構造を Drive 側にも反映する設定なら、
+    # 起動時に既存ファイルを正しいサブフォルダへ再配置する（fileId維持・URL不変）
+    if config.sync.mirror_subfolders:
+        logger.info("NASフォルダ階層ミラー: 有効 — 既存ファイルを再配置中...")
+        moved = reorganize_existing_files(
+            config, state_db, service, sheets_folder_id, pdf_folder_id
+        )
+        logger.info("再配置完了: %d ファイル処理", moved)
+
+    # 初回同期を即座に実行（PC起動時の朝同期に相当）
+    _run_sync_cycle(config, state_db, service, sheets_folder_id, pdf_folder_id)
 
     # 定期実行ループ
+    # 長時間の sleep 後に httplib2 の TCP セッションが死ぬ問題があるため、
+    # 各サイクル前に service を再生成して transient エラーの初発を抑制する。
     while not _shutdown_event.is_set():
-        logger.info("次回同期まで %d分 待機...", config.sync.interval_minutes)
-        # Event.waitで待機（シグナルで即座に解除される）
-        if _shutdown_event.wait(timeout=interval_sec):
+        wait_sec, next_run_at = _compute_next_wait(config, datetime.now())
+        if next_run_at is not None:
+            logger.info(
+                "次回同期: %s（%.0f秒後）",
+                next_run_at.strftime("%Y-%m-%d %H:%M:%S"), wait_sec,
+            )
+        else:
+            logger.info("次回同期まで %.0f秒 待機...", wait_sec)
+        if _shutdown_event.wait(timeout=wait_sec):
             break
-        _run_sync_cycle(config, state_db, client)
+        service = build_drive_service(config.google.credentials_path, quiet=True)
+        _run_sync_cycle(config, state_db, service, sheets_folder_id, pdf_folder_id)
 
     logger.info("=== tamatex 正常終了 ===")
 
 
-def _run_sync_cycle(config: AppConfig, state_db: StateDB, client) -> None:
+def _compute_next_wait(
+    config: AppConfig, now: datetime
+) -> tuple[float, datetime | None]:
+    """次回同期までの待機秒数と、その絶対時刻を返す。
+
+    sync.mode == "times" のときは指定時刻リストから次の発火時刻を計算する。
+    それ以外は interval_minutes ベースの単純待機。
+    """
+    if config.sync.mode == "times" and config.sync.times:
+        candidates: list[datetime] = []
+        for t in config.sync.times:
+            hh, mm = map(int, t.split(":"))
+            today_target = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+            if today_target > now:
+                candidates.append(today_target)
+            else:
+                candidates.append(today_target + timedelta(days=1))
+        next_run = min(candidates)
+        wait = max((next_run - now).total_seconds(), 1.0)
+        return wait, next_run
+
+    return float(config.sync.interval_minutes * 60), None
+
+
+def _run_sync_cycle(
+    config: AppConfig,
+    state_db: StateDB,
+    service,
+    sheets_folder_id: str,
+    pdf_folder_id: str,
+) -> None:
     """同期サイクルを1回実行してログ出力する。"""
     logger.info("--- 同期サイクル開始 ---")
     try:
-        stats = sync_cycle(config, state_db, client, _shutdown_event)
+        stats = sync_cycle(
+            config, state_db, service,
+            sheets_folder_id, pdf_folder_id,
+            _shutdown_event,
+        )
         logger.info(
             "--- 同期サイクル完了: スキャン=%d, 同期=%d, スキップ=%d, エラー=%d ---",
             stats["scanned"], stats["synced"], stats["skipped"], stats["errors"],
@@ -185,7 +390,9 @@ def _run_sync_cycle(config: AppConfig, state_db: StateDB, client) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="tamatex - Excel to Spreadsheet sync")
+    parser = argparse.ArgumentParser(
+        description="tamatex - Excel to Google Sheets/PDF sync"
+    )
     parser.add_argument(
         "-c", "--config",
         default="./config/config.yaml",

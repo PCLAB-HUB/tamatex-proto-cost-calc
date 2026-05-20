@@ -1,152 +1,137 @@
-"""Google Sheets同期モジュール。Excelデータをスプレッドシートに書き込む。"""
+"""Google Sheets 同期モジュール。
+
+.xlsx を Drive API でそのままアップロードし、Google 側に Sheets 形式へ
+自動変換させる。書式（罫線・色・マージセル・通貨書式・非表示列・カスタム数値書式）は
+Google の純正コンバータが保持するため、openpyxl で値を抜き出して書き戻す旧方式より
+再現率が大幅に向上する。
+
+既存 fileId がある場合はコンテンツを置換（URL は不変）、フォルダ位置が違えば
+自動で矯正する。
+
+NAS 上のファイルを直接 MediaFileUpload に渡すと、Drive API 呼び出しが完了するまで
+NAS ファイルが読込ロックされる（Windows SMB のファイル共有モードの都合）。
+事務員が同じ Excel を Office で保存しようとすると「ドキュメントが保存されていません」
+エラーが出るため、**ローカル一時ファイルにコピーしてからアップロード** することで
+NAS ロック時間を最小化する。
+"""
 
 import logging
-import time as time_module
+import os
+import shutil
+import tempfile
+from contextlib import contextmanager
 
-import sys
+from googleapiclient.errors import HttpError
+from googleapiclient.http import MediaFileUpload
 
-import gspread
-
-from tamatex.excel_reader import WorkbookData
+from tamatex.drive_utils import (
+    MIME_SHEETS,
+    MIME_XLSX,
+    move_to_folder,
+    with_retry,
+)
 
 logger = logging.getLogger("tamatex")
 
-# API呼び出し間の待機秒数（レート制限対策）
-API_WAIT_SECONDS = 1.0
 
+@contextmanager
+def _local_copy(src_path: str):
+    """NAS ファイルをローカル一時ファイルにコピーし、パスを yield する。
 
-def authenticate(credentials_path: str) -> gspread.Client:
-    """サービスアカウントで認証し、gspreadクライアントを返す。
-
-    gspread.service_account() を使用することで、トークンの自動リフレッシュが保証される。
+    終了時に一時ファイルを削除する。失敗しても無視（OSエラーは警告ログのみ）。
+    NAS ファイルへのアクセスをコピー時間（通常 0.1〜1秒）に最小化することで、
+    Excel 側の保存処理との衝突を回避する。
     """
-    from pathlib import Path
-
-    cred_path = Path(credentials_path)
-    if not cred_path.exists():
-        raise FileNotFoundError(f"認証ファイルが見つかりません: {credentials_path}")
-
-    # Unix系: パーミッションが緩すぎる場合に警告（F-01対策）
-    if sys.platform != "win32":
-        mode = oct(cred_path.stat().st_mode)[-3:]
-        if mode not in ("600", "400"):
-            logger.warning(
-                "認証ファイルのパーミッションが緩すぎます: %s (現在: %s, 推奨: 600)",
-                cred_path, mode,
-            )
-
-    client = gspread.service_account(filename=str(cred_path))
-    logger.info("Google API認証成功")
-    return client
-
-
-def create_spreadsheet(
-    client: gspread.Client,
-    title: str,
-    folder_id: str = "",
-    share_with: list[str] | None = None,
-) -> str:
-    """新規スプレッドシートを作成し、IDを返す。"""
-    # folder_idが指定された場合は直接そのフォルダに作成する（gspread 6.x）
-    spreadsheet = client.create(title, folder_id=folder_id if folder_id else None)
-    spreadsheet_id = spreadsheet.id
-    logger.info("スプレッドシート作成: '%s' (ID: %s)", title, spreadsheet_id)
-    if folder_id:
-        logger.info("フォルダに作成: %s", folder_id)
-
-    # 共有設定
-    if share_with:
-        for email in share_with:
-            try:
-                spreadsheet.share(email, perm_type="user", role="reader")
-                logger.info("共有追加: %s (閲覧者)", email)
-            except Exception as e:
-                logger.warning("共有設定失敗（続行）: %s - %s", email, e)
-            time_module.sleep(API_WAIT_SECONDS)
-
-    return spreadsheet_id
-
-
-def sync_workbook(
-    client: gspread.Client,
-    workbook: WorkbookData,
-    spreadsheet_id: str,
-) -> None:
-    """WorkbookDataの内容を既存スプレッドシートに上書き同期する。"""
-    spreadsheet = client.open_by_key(spreadsheet_id)
-
-    existing_sheets = {ws.title: ws for ws in spreadsheet.worksheets()}
-    target_sheet_names = [s.name for s in workbook.sheets]
-
-    for sheet_data in workbook.sheets:
-        if sheet_data.name in existing_sheets:
-            worksheet = existing_sheets[sheet_data.name]
-        else:
-            # 新しいシートを作成
-            rows = max(len(sheet_data.rows), 1)
-            cols = max((max(len(r) for r in sheet_data.rows) if sheet_data.rows else 1), 1)
-            worksheet = spreadsheet.add_worksheet(
-                title=sheet_data.name, rows=rows, cols=cols
-            )
-            logger.info("  シート追加: '%s'", sheet_data.name)
-            time_module.sleep(API_WAIT_SECONDS)
-
-        # データ書き込み（上書き → 余剰行のみクリア）
-        if sheet_data.rows:
-            # 現在のシート行数を取得（余剰行削除のため）
-            old_row_count = worksheet.row_count
-
-            # 行数・列数を調整
-            max_cols = max(len(r) for r in sheet_data.rows)
-            # 全行の列数を揃える
-            normalized_rows = [
-                row + [""] * (max_cols - len(row)) for row in sheet_data.rows
-            ]
-
-            # clear()なしで直接上書き（空白ウィンドウを排除）
-            worksheet.update(
-                normalized_rows,
-                value_input_option="RAW",
-            )
-            logger.info(
-                "  シート更新: '%s' (%d行 x %d列)",
-                sheet_data.name,
-                len(normalized_rows),
-                max_cols,
-            )
-
-            # 新データより多かった旧行を削除してゴミデータを残さない
-            new_row_count = len(normalized_rows)
-            if old_row_count > new_row_count:
-                excess_range = f"{new_row_count + 1}:{old_row_count}"
-                worksheet.batch_clear([excess_range])
-                logger.debug(
-                    "  余剰行クリア: '%s' (%s)",
-                    sheet_data.name,
-                    excess_range,
-                )
-        else:
-            worksheet.clear()
-            logger.info("  シートクリア: '%s' (空)", sheet_data.name)
-
-        time_module.sleep(API_WAIT_SECONDS)
-
-    # Excel側で削除されたシートをスプレッドシートからも削除
-    # ただし最低1シートは残す必要がある
-    sheets_to_delete = [
-        ws for name, ws in existing_sheets.items()
-        if name not in target_sheet_names
-    ]
-    deleted_count = 0
-    total_sheets = len(target_sheet_names) + len(sheets_to_delete)
-    for ws in sheets_to_delete:
-        # 削除後の残シート数が0になる場合は中断する
-        if total_sheets - deleted_count <= 1:
-            break
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".xlsx", prefix="tamatex_upload_")
+    os.close(tmp_fd)  # ハンドルは閉じてからコピーする
+    try:
+        shutil.copy2(src_path, tmp_path)
+        logger.debug(
+            "NASファイルをローカルコピー: %s -> %s (%d bytes)",
+            src_path, tmp_path, os.path.getsize(tmp_path),
+        )
+        yield tmp_path
+    finally:
         try:
-            spreadsheet.del_worksheet(ws)
-            deleted_count += 1
-            logger.info("  シート削除: '%s'", ws.title)
-            time_module.sleep(API_WAIT_SECONDS)
-        except Exception as e:
-            logger.warning("  シート削除失敗（続行）: '%s' - %s", ws.title, e)
+            os.unlink(tmp_path)
+        except OSError as e:
+            logger.warning("一時ファイル削除失敗（続行）: %s - %s", tmp_path, e)
+
+
+def upsert_sheet(
+    service,
+    xlsx_path: str,
+    title: str,
+    folder_id: str,
+    existing_file_id: str = "",
+) -> str:
+    """.xlsx を Google Sheets に変換してアップロード、または既存を更新する。
+
+    NAS ロック時間最小化のため、内部でローカル一時ファイルにコピーしてから
+    アップロードする。
+
+    Parameters
+    ----------
+    service : Resource
+        Drive API v3 サービスオブジェクト。
+    xlsx_path : str
+        アップロード元の xlsx ファイル絶対パス（UNC可）。
+    title : str
+        Sheets のファイル名。
+    folder_id : str
+        配置先フォルダ ID。
+    existing_file_id : str
+        既存 Sheets の fileId。空なら新規作成。
+
+    Returns
+    -------
+    str
+        Sheets の fileId。
+    """
+    with _local_copy(xlsx_path) as local_path:
+        if existing_file_id:
+            try:
+                # MediaFileUpload はリトライ毎に作り直す（ストリーム位置リセットのため）
+                with_retry(
+                    lambda: service.files().update(
+                        fileId=existing_file_id,
+                        body={"name": title, "mimeType": MIME_SHEETS},
+                        media_body=MediaFileUpload(
+                            local_path, mimetype=MIME_XLSX, resumable=False
+                        ),
+                        fields="id,name",
+                        supportsAllDrives=True,
+                    ).execute(),
+                    op_name=f"files.update[Sheets:{title}]",
+                )
+                logger.info("Sheets更新: %s (%s)", title, existing_file_id)
+                move_to_folder(service, existing_file_id, folder_id)
+                return existing_file_id
+            except HttpError as e:
+                if e.resp.status == 404:
+                    logger.warning(
+                        "既存Sheets喪失のため新規作成: old_id=%s title=%s",
+                        existing_file_id, title,
+                    )
+                    # 新規作成フローに落ちる
+                else:
+                    raise
+
+        meta = {
+            "name": title,
+            "mimeType": MIME_SHEETS,
+            "parents": [folder_id],
+        }
+        new = with_retry(
+            lambda: service.files().create(
+                body=meta,
+                media_body=MediaFileUpload(
+                    local_path, mimetype=MIME_XLSX, resumable=False
+                ),
+                fields="id,name",
+                supportsAllDrives=True,
+            ).execute(),
+            op_name=f"files.create[Sheets:{title}]",
+        )
+        logger.info("Sheets新規作成: %s (%s)", title, new["id"])
+        return new["id"]
