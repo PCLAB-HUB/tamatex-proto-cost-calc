@@ -342,7 +342,15 @@ def run(config_path: str | Path) -> None:
             )
         if not _sleep_until_event(next_run_at, _shutdown_event):
             break
-        service = build_drive_service(config.google.credentials_path, quiet=True)
+        # service 再生成は失敗してもデーモンを止めない。認証ファイルの一時的な
+        # 読み取り不可や Google 側の一時障害があっても、前回の service で
+        # サイクルを試み、_run_sync_cycle 内のリトライ機構と with_retry に救出を委ねる。
+        try:
+            service = build_drive_service(config.google.credentials_path, quiet=True)
+        except Exception as e:
+            logger.error(
+                "service再生成失敗（前回のserviceで継続）: %s", e, exc_info=True
+            )
         _run_sync_cycle(config, state_db, service, sheets_folder_id, pdf_folder_id)
 
     logger.info("=== tamatex 正常終了 ===")

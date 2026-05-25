@@ -123,14 +123,21 @@ def test_times_mode_at_exact_time_skips_to_next():
     (datetime(2026, 4, 28, 15,  0, 0), 12, 1),  # 15:00ジャスト → 翌日12:00
     (datetime(2026, 4, 28, 18,  0, 0), 12, 1),  # 終業後 → 翌日12:00
     (datetime(2026, 4, 28, 23, 59, 0), 12, 1),  # 深夜 → 翌日12:00
+    # 月またぎ境界（4/30 終業後 → 5/1 12:00）
+    (datetime(2026, 4, 30, 18,  0, 0), 12, 1),
+    # 月またぎ境界（5/31 終業後 → 6/1 12:00）
+    (datetime(2026, 5, 31, 18,  0, 0), 12, 1),
+    # 年またぎ境界（12/31 終業後 → 1/1 12:00）
+    (datetime(2026, 12, 31, 18, 0, 0), 12, 1),
 ])
 def test_customer_schedule_12_15(now, expected_h, expected_d_offset):
     cfg = _mk_config(SyncConfig(mode="times", times=["12:00", "15:00"]))
     _, next_at = _compute_next_wait(cfg, now)
 
+    expected_date = (now + timedelta(days=expected_d_offset)).date()
     assert next_at.hour == expected_h
     assert next_at.minute == 0
-    assert next_at.day == now.day + expected_d_offset
+    assert next_at.date() == expected_date
 
 
 # ---------------------------------------------------------------------------

@@ -272,6 +272,32 @@ def test_with_retry_recovers_after_transient_http_status(status):
     assert fn.call_count == 2
 
 
+def test_with_retry_handles_string_status_from_httplib2():
+    """httplib2 のバージョン差で resp.status が str で来た場合もリトライ対象として判定する。"""
+    err = MagicMock(spec=HttpError)
+    resp = MagicMock()
+    resp.status = "500"  # 文字列の "500"
+    err.resp = resp
+    # HttpError として認識させるため実体を差し替え
+    real_err = _mk_http_error(500)
+    real_err.resp.status = "500"  # 型を str に書き換え
+
+    fn = MagicMock(side_effect=[real_err, "ok"])
+    assert with_retry(fn, op_name="test") == "ok"
+    assert fn.call_count == 2
+
+
+def test_with_retry_handles_invalid_status_as_non_transient():
+    """resp.status が int変換不能な値（None や 'abc'）の場合は非一過性として即raise。"""
+    err = _mk_http_error(500)
+    err.resp.status = "abc"  # 数値化不能
+
+    fn = MagicMock(side_effect=err)
+    with pytest.raises(HttpError):
+        with_retry(fn, op_name="test")
+    assert fn.call_count == 1
+
+
 def test_with_retry_raises_http_404_immediately():
     """404 はリトライせず即座に raise する（呼出側のフォールバック判定のため）。"""
     err = _mk_http_error(404)

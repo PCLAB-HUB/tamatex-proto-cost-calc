@@ -97,7 +97,13 @@ def with_retry(
         except _TRANSIENT_EXC as e:
             last_exc = e
         except HttpError as e:
-            status = getattr(e.resp, "status", None) if getattr(e, "resp", None) else None
+            # httplib2 のバージョン差で resp.status が str/int 両方ありうるため
+            # int() で明示変換する（変換できなければ非一過性として上位へ送る）
+            raw_status = getattr(e.resp, "status", None) if getattr(e, "resp", None) else None
+            try:
+                status = int(raw_status) if raw_status is not None else None
+            except (TypeError, ValueError):
+                status = None
             if status not in _TRANSIENT_HTTP_STATUS:
                 # 一過性でない HTTP エラー（404 等）はそのまま上位へ
                 raise
