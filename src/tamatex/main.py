@@ -325,21 +325,70 @@ def run(config_path: str | Path) -> None:
     # 定期実行ループ
     # 長時間の sleep 後に httplib2 の TCP セッションが死ぬ問題があるため、
     # 各サイクル前に service を再生成して transient エラーの初発を抑制する。
+    # 加えて Windows モダンスタンバイ/休止からのスリープ復帰時にタイマー
+    # が伸びる問題への対策として、_sleep_until_event で壁時計を最大60秒毎に
+    # 確認しながら待機する。
     while not _shutdown_event.is_set():
         wait_sec, next_run_at = _compute_next_wait(config, datetime.now())
-        if next_run_at is not None:
+        if next_run_at is None:
+            # interval モードは絶対時刻が無いため、現在時刻から積算した
+            # 仮想的な target_time を作って同一の待機ロジックに乗せる。
+            next_run_at = datetime.now() + timedelta(seconds=wait_sec)
+            logger.info("次回同期まで %.0f秒 待機...", wait_sec)
+        else:
             logger.info(
                 "次回同期: %s（%.0f秒後）",
                 next_run_at.strftime("%Y-%m-%d %H:%M:%S"), wait_sec,
             )
-        else:
-            logger.info("次回同期まで %.0f秒 待機...", wait_sec)
-        if _shutdown_event.wait(timeout=wait_sec):
+        if not _sleep_until_event(next_run_at, _shutdown_event):
             break
         service = build_drive_service(config.google.credentials_path, quiet=True)
         _run_sync_cycle(config, state_db, service, sheets_folder_id, pdf_folder_id)
 
     logger.info("=== tamatex 正常終了 ===")
+
+
+def _sleep_until_event(
+    target_time: datetime,
+    shutdown_event: threading.Event,
+    chunk_sec: float = 60.0,
+    _now=datetime.now,
+) -> bool:
+    """目標時刻まで chunk_sec ごとに壁時計をチェックしながら待機する。
+
+    Windows モダンスタンバイ/休止状態のスリープから復帰した直後でも、
+    最大 chunk_sec の遅延で予定時刻越えを検知して抜ける。
+    Python の threading.Event.wait は内部的に OS の相対時間ベースの
+    タイマーを使うため、PC がスリープすると残時間がフリーズし
+    「予定時刻を過ぎても sleep し続ける」現象が発生する。本関数は
+    短いチャンクで wait を分割し、毎回 datetime.now() （壁時計）を見て
+    実時刻が target_time を超えていないか確認することでこれを回避する。
+
+    Parameters
+    ----------
+    target_time : datetime
+        目標とする絶対時刻。
+    shutdown_event : threading.Event
+        シャットダウン要求の通知。発火時は即 False を返す。
+    chunk_sec : float
+        1回の wait の最大長さ（秒）。デフォルト 60.0。
+        PC スリープ復帰時の最大検知遅延に等しい。
+    _now : callable
+        テスト用注入ポイント。デフォルトは ``datetime.now``。
+
+    Returns
+    -------
+    bool
+        ``True``: 目標時刻に到達。``False``: shutdown 要求あり。
+    """
+    while not shutdown_event.is_set():
+        remaining = (target_time - _now()).total_seconds()
+        if remaining <= 0:
+            return True
+        chunk = min(remaining, chunk_sec)
+        if shutdown_event.wait(timeout=chunk):
+            return False
+    return False
 
 
 def _compute_next_wait(
