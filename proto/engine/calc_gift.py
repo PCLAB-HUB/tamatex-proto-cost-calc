@@ -137,9 +137,9 @@ def calc_gift_set(
         freight_per_case=gift.freight_per_case,
         packing_cost=gift.packing_cost,
         other_logistics=gift.other_logistics,
-        cl=gift.logistics_cl,
-        cm=gift.logistics_cm,
-        cn=gift.logistics_cn,
+        cl=cond.logistics_gift.io_fee,
+        cm=cond.logistics_gift.storage_fee,
+        cn=cond.logistics_gift.storage_months,
         pcs_per_case=gift.pcs_per_case,
     )
 

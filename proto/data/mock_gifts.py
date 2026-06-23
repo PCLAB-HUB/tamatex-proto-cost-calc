@@ -18,12 +18,12 @@ Excelの「ひな形」シート下段（行23-34）の実データ。
     freight_per_case = 1230.0  (CI列)
     packing_cost   = 0.0    (CJ列は None)
     other_logistics = 40.0  (CK列=40)
-    logistics_cl   = 140.0
-    logistics_cm   = 200.0
-    logistics_cn   = 1.0
     brand_label〜other_material (AP〜AU) = 0
     design_cost〜other_depreciation (AV〜AY) = 0
     other_process_1 = other_process_2 = 0
+
+入出庫(CL=140)/保管料(CM=200)/月数(CN=1)は条件側 ImportCondition.logistics_gift
+が保持する（倉庫料金はケース単位でコンテナ非依存・単品/ギフト区分で決まるため）。
 
 pcs_per_case: ギフト01-06は20、ギフト07-12は8
 sales_quantity: 行23-30は1000、行31-34は500
@@ -67,11 +67,7 @@ GIFT_01 = GiftSet(
     cases_loaded=150,
     freight_per_case=1230.0,
     packing_cost=0.0,
-    other_logistics=40.0,
-    logistics_cl=140.0,
-    logistics_cm=200.0,
-    logistics_cn=1.0,
-)
+    other_logistics=40.0,)
 
 # 行24: FT2 ふわ — ④×2
 GIFT_02 = GiftSet(
@@ -101,11 +97,7 @@ GIFT_02 = GiftSet(
     cases_loaded=150,
     freight_per_case=1230.0,
     packing_cost=0.0,
-    other_logistics=40.0,
-    logistics_cl=140.0,
-    logistics_cm=200.0,
-    logistics_cn=1.0,
-)
+    other_logistics=40.0,)
 
 # 行25: FT1MT4 もこ — ③×1, ⑥×4
 GIFT_03 = GiftSet(
@@ -136,11 +128,7 @@ GIFT_03 = GiftSet(
     cases_loaded=150,
     freight_per_case=1230.0,
     packing_cost=0.0,
-    other_logistics=40.0,
-    logistics_cl=140.0,
-    logistics_cm=200.0,
-    logistics_cn=1.0,
-)
+    other_logistics=40.0,)
 
 # 行26: FT1MT4 ふわ — ④×1, ⑥×4
 GIFT_04 = GiftSet(
@@ -171,11 +159,7 @@ GIFT_04 = GiftSet(
     cases_loaded=150,
     freight_per_case=1230.0,
     packing_cost=0.0,
-    other_logistics=40.0,
-    logistics_cl=140.0,
-    logistics_cm=200.0,
-    logistics_cn=1.0,
-)
+    other_logistics=40.0,)
 
 # 行27: BT1 もこ — ①×1
 GIFT_05 = GiftSet(
@@ -205,11 +189,7 @@ GIFT_05 = GiftSet(
     cases_loaded=150,
     freight_per_case=1230.0,
     packing_cost=0.0,
-    other_logistics=40.0,
-    logistics_cl=140.0,
-    logistics_cm=200.0,
-    logistics_cn=1.0,
-)
+    other_logistics=40.0,)
 
 # 行28: BT1 ふわ — ②×1
 GIFT_06 = GiftSet(
@@ -239,11 +219,7 @@ GIFT_06 = GiftSet(
     cases_loaded=150,
     freight_per_case=1230.0,
     packing_cost=0.0,
-    other_logistics=40.0,
-    logistics_cl=140.0,
-    logistics_cm=200.0,
-    logistics_cn=1.0,
-)
+    other_logistics=40.0,)
 
 # ---------------------------------------------------------------------------
 # ギフト07-08: BT系複合（pcs_per_case=8, sales_quantity=1000）
@@ -279,11 +255,7 @@ GIFT_07 = GiftSet(
     cases_loaded=150,
     freight_per_case=1230.0,
     packing_cost=0.0,
-    other_logistics=40.0,
-    logistics_cl=140.0,
-    logistics_cm=200.0,
-    logistics_cn=1.0,
-)
+    other_logistics=40.0,)
 
 # 行30: BT1FT2 ふわ — ②×1, ④×2
 GIFT_08 = GiftSet(
@@ -314,11 +286,7 @@ GIFT_08 = GiftSet(
     cases_loaded=150,
     freight_per_case=1230.0,
     packing_cost=0.0,
-    other_logistics=40.0,
-    logistics_cl=140.0,
-    logistics_cm=200.0,
-    logistics_cn=1.0,
-)
+    other_logistics=40.0,)
 
 # 行31: BT1FT1BM1 もこ — ①×1, ③×1, ⑤×1
 GIFT_09 = GiftSet(
@@ -350,11 +318,7 @@ GIFT_09 = GiftSet(
     cases_loaded=150,
     freight_per_case=1230.0,
     packing_cost=0.0,
-    other_logistics=40.0,
-    logistics_cl=140.0,
-    logistics_cm=200.0,
-    logistics_cn=1.0,
-)
+    other_logistics=40.0,)
 
 # 行32: BT1BM2 もこ — ①×1, ⑤×2
 GIFT_10 = GiftSet(
@@ -385,11 +349,7 @@ GIFT_10 = GiftSet(
     cases_loaded=150,
     freight_per_case=1230.0,
     packing_cost=0.0,
-    other_logistics=40.0,
-    logistics_cl=140.0,
-    logistics_cm=200.0,
-    logistics_cn=1.0,
-)
+    other_logistics=40.0,)
 
 # 行33: BT2 もこ — ①×2
 GIFT_11 = GiftSet(
@@ -419,11 +379,7 @@ GIFT_11 = GiftSet(
     cases_loaded=150,
     freight_per_case=1230.0,
     packing_cost=0.0,
-    other_logistics=40.0,
-    logistics_cl=140.0,
-    logistics_cm=200.0,
-    logistics_cn=1.0,
-)
+    other_logistics=40.0,)
 
 # 行34: BT2 ふわ — ②×2
 GIFT_12 = GiftSet(
@@ -453,11 +409,7 @@ GIFT_12 = GiftSet(
     cases_loaded=150,
     freight_per_case=1230.0,
     packing_cost=0.0,
-    other_logistics=40.0,
-    logistics_cl=140.0,
-    logistics_cm=200.0,
-    logistics_cn=1.0,
-)
+    other_logistics=40.0,)
 
 # 全ギフトセットのリスト
 ALL_GIFTS: list[GiftSet] = [

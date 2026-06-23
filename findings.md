@@ -83,7 +83,8 @@
   （item側は既に月数1で計算済み）。
 
 ### Codexレビュー指摘の対応状況（2026-06-23）
-- 指摘1（物流費未配線 / high）: 上記設計で実装可能。今回は record-only（ユーザー選択）。
+- 指摘1（物流費未配線 / high）: ✅ 実装済み（2026-06-23）。LogisticsParams で単品/ギフト別に配線、
+  軸の取り違え修正、storage_months 0→1、serializer後方互換付き。proto 245件全PASS・検証120/120維持。
 - 指摘2（weight欠損で運賃・輸入費が0に消失 / high）: 目方なし品番(ITEM_02/05/06)の扱いは別途。
   Excelでは目方なし=BZ積載個数が #DIV/0!。実データ投入前に按分基準の確認が必要。
 - 指摘3（見積単価 ceil の float 丸め誤差 / medium）: 修正済（`roundup_yen`、commit 8273d03）。

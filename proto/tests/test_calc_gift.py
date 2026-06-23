@@ -200,3 +200,27 @@ class TestZeroSellingPriceLossNotHidden:
         result = calc_gift_set(ALL_GIFTS[0], ALL_ITEMS, item_results, COND_20FT)
         excel_l = result.sales_amount * result.gross_profit_rate
         assert result.profit_amount == pytest.approx(excel_l, abs=TOLERANCE)
+
+
+class TestLogisticsConditionWiringGift:
+    """物流条件(cond.logistics_gift)がギフト原価に反映される（Codex指摘1の回帰防止）."""
+
+    def test_logistics_gift_affects_cost(self, item_results):
+        from dataclasses import replace
+
+        from proto.engine.models import LogisticsParams
+
+        base = calc_gift_set(ALL_GIFTS[0], ALL_ITEMS, item_results, COND_20FT)
+        bumped = calc_gift_set(
+            ALL_GIFTS[0],
+            ALL_ITEMS,
+            item_results,
+            replace(
+                COND_20FT,
+                logistics_gift=LogisticsParams(
+                    io_fee=9999.0, storage_fee=8888.0, storage_months=7.0
+                ),
+            ),
+        )
+        assert bumped.logistics_cost != base.logistics_cost
+        assert bumped.manufacturing_cost != base.manufacturing_cost

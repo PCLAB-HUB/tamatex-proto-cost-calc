@@ -5,7 +5,7 @@ from __future__ import annotations
 import streamlit as st
 
 from proto.data.mock_params import COND_20FT, COND_40FT
-from proto.engine.models import ImportCondition, ImportExpenses
+from proto.engine.models import ImportCondition, ImportExpenses, LogisticsParams
 from proto.storage.scenario_repo import ScenarioNameConflictError, ScenarioRepository
 
 
@@ -159,18 +159,34 @@ def render_sidebar(repo: ScenarioRepository | None = None) -> ImportCondition:
 
     # --- 物流 ---
     st.sidebar.subheader("🚚 物流")
-    cols5 = st.sidebar.columns(3)
-    io_fee = cols5[0].number_input(
-        "入出庫 (円)", value=base_cond.io_fee, step=10.0,
-        min_value=0.0, key=f"{kp}_io_fee",
+    st.sidebar.caption("倉庫料金はケース単位でコンテナ非依存。単品/ギフトで別単価。")
+    st.sidebar.markdown("**単品用**")
+    cols5s = st.sidebar.columns(3)
+    io_fee_s = cols5s[0].number_input(
+        "入出庫 (円)", value=base_cond.logistics_single.io_fee, step=10.0,
+        min_value=0.0, key=f"{kp}_io_fee_s",
     )
-    storage_fee = cols5[1].number_input(
-        "保管料 (円)", value=base_cond.storage_fee, step=10.0,
-        min_value=0.0, key=f"{kp}_storage_fee",
+    storage_fee_s = cols5s[1].number_input(
+        "保管料 (円)", value=base_cond.logistics_single.storage_fee, step=10.0,
+        min_value=0.0, key=f"{kp}_storage_fee_s",
     )
-    storage_months = cols5[2].number_input(
-        "ヶ月", value=base_cond.storage_months, step=1.0,
-        min_value=0.0, key=f"{kp}_storage_months",
+    storage_months_s = cols5s[2].number_input(
+        "ヶ月", value=base_cond.logistics_single.storage_months, step=1.0,
+        min_value=0.0, key=f"{kp}_storage_months_s",
+    )
+    st.sidebar.markdown("**ギフト用**")
+    cols5g = st.sidebar.columns(3)
+    io_fee_g = cols5g[0].number_input(
+        "入出庫 (円)", value=base_cond.logistics_gift.io_fee, step=10.0,
+        min_value=0.0, key=f"{kp}_io_fee_g",
+    )
+    storage_fee_g = cols5g[1].number_input(
+        "保管料 (円)", value=base_cond.logistics_gift.storage_fee, step=10.0,
+        min_value=0.0, key=f"{kp}_storage_fee_g",
+    )
+    storage_months_g = cols5g[2].number_input(
+        "ヶ月", value=base_cond.logistics_gift.storage_months, step=1.0,
+        min_value=0.0, key=f"{kp}_storage_months_g",
     )
 
     st.sidebar.divider()
@@ -202,9 +218,12 @@ def render_sidebar(repo: ScenarioRepository | None = None) -> ImportCondition:
         tariff_rate=tariff_rate,
         import_expenses_single=exp_single,
         import_expenses_gift=exp_gift,
-        io_fee=io_fee,
-        storage_fee=storage_fee,
-        storage_months=storage_months,
+        logistics_single=LogisticsParams(
+            io_fee=io_fee_s, storage_fee=storage_fee_s, storage_months=storage_months_s
+        ),
+        logistics_gift=LogisticsParams(
+            io_fee=io_fee_g, storage_fee=storage_fee_g, storage_months=storage_months_g
+        ),
     )
 
     # --- シナリオ保存（repo が渡された場合のみ表示） ---
@@ -293,10 +312,13 @@ def apply_condition_to_session_state(cond: ImportCondition) -> None:
     st.session_state[f"{kp}_insurance"] = cond.insurance_rate
     st.session_state[f"{kp}_tariff"] = cond.tariff_rate
 
-    # 物流
-    st.session_state[f"{kp}_io_fee"] = cond.io_fee
-    st.session_state[f"{kp}_storage_fee"] = cond.storage_fee
-    st.session_state[f"{kp}_storage_months"] = cond.storage_months
+    # 物流（単品/ギフト別）
+    st.session_state[f"{kp}_io_fee_s"] = cond.logistics_single.io_fee
+    st.session_state[f"{kp}_storage_fee_s"] = cond.logistics_single.storage_fee
+    st.session_state[f"{kp}_storage_months_s"] = cond.logistics_single.storage_months
+    st.session_state[f"{kp}_io_fee_g"] = cond.logistics_gift.io_fee
+    st.session_state[f"{kp}_storage_fee_g"] = cond.logistics_gift.storage_fee
+    st.session_state[f"{kp}_storage_months_g"] = cond.logistics_gift.storage_months
 
     # 輸入経費（単品）
     for key, val in _expenses_to_session_state_keys(

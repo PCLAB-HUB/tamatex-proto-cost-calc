@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 
 from proto.data.mock_params import COND_20FT, COND_40FT
-from proto.engine.models import ImportCondition, ImportExpenses
+from proto.engine.models import ImportCondition, ImportExpenses, LogisticsParams
 from proto.ui.sidebar import _expenses_to_session_state_keys
 
 
@@ -129,9 +129,12 @@ class TestApplyConditionValidation:
             tariff_rate=0.074,
             import_expenses_single=COND_20FT.import_expenses_single,
             import_expenses_gift=COND_20FT.import_expenses_gift,
-            io_fee=70.0,
-            storage_fee=120.0,
-            storage_months=0.0,
+            logistics_single=LogisticsParams(
+                io_fee=70.0, storage_fee=120.0, storage_months=1.0
+            ),
+            logistics_gift=LogisticsParams(
+                io_fee=140.0, storage_fee=200.0, storage_months=1.0
+            ),
         )
 
         with pytest.raises(ValueError, match="Unknown condition name"):
@@ -183,10 +186,13 @@ class TestApplyConditionValidation:
         assert mock_ss[f"{kp}_insurance"] == COND_20FT.insurance_rate
         assert mock_ss[f"{kp}_tariff"] == COND_20FT.tariff_rate
 
-        # 物流
-        assert mock_ss[f"{kp}_io_fee"] == COND_20FT.io_fee
-        assert mock_ss[f"{kp}_storage_fee"] == COND_20FT.storage_fee
-        assert mock_ss[f"{kp}_storage_months"] == COND_20FT.storage_months
+        # 物流（単品/ギフト別）
+        assert mock_ss[f"{kp}_io_fee_s"] == COND_20FT.logistics_single.io_fee
+        assert mock_ss[f"{kp}_storage_fee_s"] == COND_20FT.logistics_single.storage_fee
+        assert mock_ss[f"{kp}_storage_months_s"] == COND_20FT.logistics_single.storage_months
+        assert mock_ss[f"{kp}_io_fee_g"] == COND_20FT.logistics_gift.io_fee
+        assert mock_ss[f"{kp}_storage_fee_g"] == COND_20FT.logistics_gift.storage_fee
+        assert mock_ss[f"{kp}_storage_months_g"] == COND_20FT.logistics_gift.storage_months
 
         # 輸入経費（単品）
         assert mock_ss[f"{kp}_exp_s_cic_usd"] == COND_20FT.import_expenses_single.cic_usd
@@ -199,8 +205,8 @@ class TestApplyConditionValidation:
     def test_session_state_key_count_for_20ft(self) -> None:
         """COND_20FT を渡したとき書き込まれる widget key の総数を確認する.
 
-        期待値: 1(radio) + 2(為替) + 4(マージン系) + 3(輸入) + 3(物流)
-                + 11(単品経費) + 11(ギフト経費) = 35
+        期待値: 1(radio) + 2(為替) + 4(マージン系) + 3(輸入) + 6(物流: 単品3+ギフト3)
+                + 11(単品経費) + 11(ギフト経費) = 38
         """
         from unittest.mock import patch
 
@@ -210,4 +216,4 @@ class TestApplyConditionValidation:
         with patch("streamlit.session_state", mock_ss):
             apply_condition_to_session_state(COND_20FT)
 
-        assert len(mock_ss) == 35
+        assert len(mock_ss) == 38

@@ -11,7 +11,7 @@ import json
 import pytest
 
 from proto.data.mock_params import COND_20FT, COND_40FT
-from proto.engine.models import ImportCondition, ImportExpenses
+from proto.engine.models import ImportCondition, ImportExpenses, LogisticsParams
 from proto.storage.serializer import condition_from_json, condition_to_json
 
 
@@ -78,9 +78,12 @@ class TestRoundTrip:
             tariff_rate=0.08,
             import_expenses_single=custom_single,
             import_expenses_gift=custom_gift,
-            io_fee=90.0,
-            storage_fee=150.0,
-            storage_months=3.0,
+            logistics_single=LogisticsParams(
+                io_fee=90.0, storage_fee=150.0, storage_months=3.0
+            ),
+            logistics_gift=LogisticsParams(
+                io_fee=180.0, storage_fee=250.0, storage_months=3.0
+            ),
         )
 
         result = condition_from_json(condition_to_json(custom_cond))
@@ -145,3 +148,32 @@ class TestFromJsonErrors:
         """不正な JSON 文字列は json.JSONDecodeError を送出すること."""
         with pytest.raises(json.JSONDecodeError):
             condition_from_json("not a json string")
+
+
+# ---------------------------------------------------------------------------
+# 後方互換（旧スキーマ: 物流フラット保持）
+# ---------------------------------------------------------------------------
+
+
+class TestBackwardCompat:
+    """旧スキーマ（io_fee/storage_fee/storage_months のフラット保持）の読み込み."""
+
+    def test_legacy_flat_logistics_migrates_to_defaults(self) -> None:
+        """旧形式 JSON が標準物流値（単品70/120/1・ギフト140/200/1）へ移行される."""
+        d = json.loads(condition_to_json(COND_20FT))
+        # 新スキーマのネストを除き、旧フラット形式を付与する
+        d.pop("logistics_single")
+        d.pop("logistics_gift")
+        d["io_fee"] = 70.0
+        d["storage_fee"] = 120.0
+        d["storage_months"] = 0.0
+        legacy_json = json.dumps(d, ensure_ascii=False)
+
+        result = condition_from_json(legacy_json)
+
+        assert result.logistics_single == LogisticsParams(70.0, 120.0, 1.0)
+        assert result.logistics_gift == LogisticsParams(140.0, 200.0, 1.0)
+        # 物流以外のフィールドは保持される
+        assert result.name == COND_20FT.name
+        assert result.internal_rate == COND_20FT.internal_rate
+        assert result.import_expenses_single == COND_20FT.import_expenses_single
