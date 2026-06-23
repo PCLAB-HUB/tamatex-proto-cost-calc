@@ -52,3 +52,30 @@ class TestSummary20FT:
         result = calc_summary(ALL_GIFTS, gift_results)
         # H22 = L22 / K22
         assert result.avg_profit_rate == pytest.approx(0.1363, abs=RATE_TOLERANCE)
+
+
+class TestSummaryZeroSales:
+    """総売上0で損失がある場合の集計（Codexレビュー指摘の回帰防止）.
+
+    売上0で粗利率を 0% と表示すると赤字が中立に見えるため、avg_profit_rate は
+    None（計算不能）を返す。損失自体は total_profit に残る。
+    """
+
+    def test_avg_profit_rate_is_none_when_sales_zero(self):
+        """全ギフト販売単価0なら平均粗利率は None で、損失は集計に残る."""
+        from dataclasses import replace
+
+        zero_gifts = [replace(g, selling_price=0.0) for g in ALL_GIFTS]
+        item_results = {
+            no: calc_single_item(it, COND_20FT) for no, it in ALL_ITEMS.items()
+        }
+        results = [
+            calc_gift_set(g, ALL_ITEMS, item_results, COND_20FT) for g in zero_gifts
+        ]
+        summary = calc_summary(zero_gifts, results)
+
+        assert summary.total_sales == 0.0
+        # 損失は集計に残る（0 に消えない）
+        assert summary.total_profit < 0
+        # 粗利率は計算不能（0% と誤表示しない）
+        assert summary.avg_profit_rate is None

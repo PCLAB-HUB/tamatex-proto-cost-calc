@@ -158,21 +158,22 @@ class TestFromJsonErrors:
 class TestBackwardCompat:
     """旧スキーマ（io_fee/storage_fee/storage_months のフラット保持）の読み込み."""
 
-    def test_legacy_flat_logistics_migrates_to_defaults(self) -> None:
-        """旧形式 JSON が標準物流値（単品70/120/1・ギフト140/200/1）へ移行される."""
+    def test_legacy_flat_logistics_preserves_values(self) -> None:
+        """旧形式 JSON の物流値が単品/ギフト両区分に保持される（標準値に上書きしない）."""
         d = json.loads(condition_to_json(COND_20FT))
         # 新スキーマのネストを除き、旧フラット形式を付与する
         d.pop("logistics_single")
         d.pop("logistics_gift")
-        d["io_fee"] = 70.0
-        d["storage_fee"] = 120.0
-        d["storage_months"] = 0.0
+        d["io_fee"] = 999.0
+        d["storage_fee"] = 888.0
+        d["storage_months"] = 7.0
         legacy_json = json.dumps(d, ensure_ascii=False)
 
         result = condition_from_json(legacy_json)
 
-        assert result.logistics_single == LogisticsParams(70.0, 120.0, 1.0)
-        assert result.logistics_gift == LogisticsParams(140.0, 200.0, 1.0)
+        # 旧値が両区分に保持される（暗黙の標準値上書きをしない）
+        assert result.logistics_single == LogisticsParams(999.0, 888.0, 7.0)
+        assert result.logistics_gift == LogisticsParams(999.0, 888.0, 7.0)
         # 物流以外のフィールドは保持される
         assert result.name == COND_20FT.name
         assert result.internal_rate == COND_20FT.internal_rate

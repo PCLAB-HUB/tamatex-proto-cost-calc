@@ -90,3 +90,11 @@
 - 指摘3（見積単価 ceil の float 丸め誤差 / medium）: 修正済（`roundup_yen`、commit 8273d03）。
 - 指摘4（為替感度が internal_rate のみ＝意味論 / medium）: 修正済（「社内為替感度」に表題・docstring正確化）。
 - 指摘5（SQLite 並行ガード欠如 / medium）: 修正済（`threading.RLock`+rollback、commit 8273d03）。
+
+### Codex再レビュー（round2/3）の追加指摘
+- 販売単価0で粗利損失が集計から消える（medium）: ✅修正（profit_amount=gross_profit×数量、c9df5e3）。
+- 旧JSON後方互換が物流の旧値を標準値に上書き（high）: ✅修正（旧値を両区分に保持）。
+- 総売上0で平均粗利率0%表示（medium）: ✅修正（avg_profit_rate を None=計算不能に変更）。
+- 40FT選択でも20FTギフトマスタ使用（high）: 📝 record-only。ギフトの cases_loaded/freight_per_case/
+  pcs_per_case が GiftSet 固有で20FT固定。40FT本格対応には「ギフト入力の条件依存化＋40FT実値テスト」が
+  必要（大規模・既知課題。mock_gifts は「20FT条件での値」と明記済み）。

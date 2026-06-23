@@ -17,7 +17,12 @@ def render_basic_info(cond: ImportCondition, summary: SummaryResult | None) -> N
         cols[0].metric("総数量", f"{summary.total_quantity:,} セット")
         cols[1].metric("総売上", f"{summary.total_sales:,.0f} 円")
         cols[2].metric("総粗利", f"{summary.total_profit:,.0f} 円")
-        cols[3].metric("平均粗利率", f"{summary.avg_profit_rate:.1%}")
+        cols[3].metric(
+            "平均粗利率",
+            f"{summary.avg_profit_rate:.1%}"
+            if summary.avg_profit_rate is not None
+            else "計算不能",
+        )
 
     st.divider()
 

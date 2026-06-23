@@ -241,4 +241,4 @@ class SummaryResult:
     total_quantity: int           # 総数量 = I22
     total_sales: float            # 総売上 = K22
     total_profit: float           # 総粗利 = L22
-    avg_profit_rate: float        # 平均粗利率 = H22 = L22/K22
+    avg_profit_rate: float | None  # 平均粗利率 = H22 = L22/K22（売上0で None=計算不能）
