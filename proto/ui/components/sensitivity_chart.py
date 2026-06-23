@@ -1,7 +1,12 @@
 """為替感度チャートコンポーネント.
 
-USD為替レートを指定範囲でスキャンし、平均原価の変動を plotly 線グラフで描画する。
-現在の社内為替（cond.internal_rate）を赤の縦破線マーカーで強調する。
+社内為替（cond.internal_rate）を指定範囲でスキャンし、平均原価（円建原価）の
+変動を plotly 線グラフで描画する。現在の社内為替を赤の縦破線マーカーで強調する。
+
+注意: 本チャートは社内為替（internal_rate）のみを動かす感度分析であり、
+現行為替（current_rate）は固定する。FOB の円換算は社内為替で行うため主要な
+感度要因だが、海外運賃・関税・単品輸入経費は現行為替に連動する。したがって
+USD 為替が実際に動いた場合の総感度は、ここに表示される値より大きくなりうる。
 """
 
 from __future__ import annotations
@@ -23,7 +28,7 @@ def _calc_avg_cost_at_fx(
     """指定為替レートでの平均原価（円建原価）を算出する.
 
     Args:
-        fx: 適用する USD 為替レート（円/USD）
+        fx: 適用する社内為替レート（円/USD）
         cond: 輸入条件（internal_rate のみ fx で上書きする）
         items: 計算対象の単品リスト
 
@@ -48,8 +53,9 @@ def render_fx_sensitivity_chart(
 ) -> None:
     """為替感度チャートを Streamlit 上に描画する.
 
-    横軸に USD 為替レート、縦軸に全品目の平均原価（円建原価）をプロットする。
+    横軸に社内為替レート、縦軸に全品目の平均原価（円建原価）をプロットする。
     現在の社内為替（cond.internal_rate）に赤の縦破線マーカーと annotation を追加する。
+    現行為替（current_rate）は固定され、社内為替単独の感度を示す。
 
     Args:
         cond: 輸入条件。internal_rate が「現在値」として強調表示される。
@@ -75,7 +81,7 @@ def render_fx_sensitivity_chart(
             y=avg_costs,
             mode="lines+markers",
             name="平均原価",
-            hovertemplate="USD=%{x:.1f}円: ¥%{y:,.0f}<extra></extra>",
+            hovertemplate="社内為替=%{x:.1f}円: ¥%{y:,.0f}<extra></extra>",
             line={"color": "#1f77b4", "width": 2},
             marker={"size": 8},
         )
@@ -86,13 +92,13 @@ def render_fx_sensitivity_chart(
         x=cond.internal_rate,
         line_dash="dash",
         line_color="#C62828",
-        annotation_text=f"現在: USD={cond.internal_rate:.0f}",
+        annotation_text=f"現在: 社内為替={cond.internal_rate:.0f}",
         annotation_position="top",
     )
 
     fig.update_layout(
-        title=f"為替感度: 平均原価 (USD={fx_min:.0f}〜{fx_max:.0f})",
-        xaxis_title="USD (円/$)",
+        title=f"社内為替感度: 平均原価 (社内為替={fx_min:.0f}〜{fx_max:.0f}円/$)",
+        xaxis_title="社内為替 (円/$)",
         yaxis_title="平均原価 (円)",
         height=400,
         hovermode="x unified",
