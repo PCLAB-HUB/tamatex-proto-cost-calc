@@ -180,8 +180,10 @@ def calc_gift_set(
     sales_amount = gift.selling_price * gift.sales_quantity
 
     # --- L列: 粗利金額 ---
-    # L = K × H
-    profit_amount = sales_amount * gross_profit_rate
+    # Excel は L = K × H だが、selling_price=0 で粗利率を 0 に丸めると損失が
+    # 集計から消えてしまう（K×H = 0×0 = 0）。粗利率に依存せず
+    # gross_profit × 数量で算出する（selling_price>0 では K×H と数学的に同値）。
+    profit_amount = gross_profit * gift.sales_quantity
 
     return GiftSetResult(
         towel_cost=towel_cost,

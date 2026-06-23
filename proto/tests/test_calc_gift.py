@@ -167,3 +167,36 @@ class TestGiftSetSpecificValues:
         """BT1FT2もこ: BZ = 8 × 150 = 1200"""
         result = calc_gift_set(ALL_GIFTS[6], ALL_ITEMS, item_results, COND_20FT)
         assert result.loaded_pcs == 1200
+
+
+class TestZeroSellingPriceLossNotHidden:
+    """販売単価0でも損失が粗利金額に正しく反映される（Codexレビュー指摘の回帰防止）.
+
+    粗利率に依存して profit_amount = K×H で算出すると、selling_price=0 のとき
+    K=0・H=0 に丸められ損失が消える。gross_profit × 数量で算出することで防ぐ。
+    """
+
+    def test_zero_selling_price_reflects_full_loss(self, item_results):
+        """販売単価0なら粗利金額は数量分の損失になり、0に消えない."""
+        from dataclasses import replace
+
+        base = ALL_GIFTS[0]
+        zero_priced = replace(base, selling_price=0.0, sales_quantity=1000)
+        result = calc_gift_set(zero_priced, ALL_ITEMS, item_results, COND_20FT)
+
+        # 販売単価0 → 粗利単価 = -製造原価
+        assert result.gross_profit == pytest.approx(
+            -result.manufacturing_cost, abs=TOLERANCE
+        )
+        # 粗利金額 = 粗利単価 × 数量（損失が 0 に丸められないこと）
+        assert result.profit_amount == pytest.approx(
+            result.gross_profit * 1000, abs=TOLERANCE
+        )
+        assert result.profit_amount < 0
+        assert result.sales_amount == 0.0
+
+    def test_positive_price_matches_excel_k_times_h(self, item_results):
+        """販売単価>0 では profit_amount が Excel 式 K×H と一致する（回帰防止）."""
+        result = calc_gift_set(ALL_GIFTS[0], ALL_ITEMS, item_results, COND_20FT)
+        excel_l = result.sales_amount * result.gross_profit_rate
+        assert result.profit_amount == pytest.approx(excel_l, abs=TOLERANCE)
