@@ -53,7 +53,43 @@ def test_init_creates_table_with_correct_columns(tmp_path):
     columns = {row[1] for row in cursor.fetchall()}
     conn.close()
 
-    assert columns == {"file_path", "mtime", "file_hash", "spreadsheet_id", "last_sync"}
+    assert columns == {
+        "file_path", "mtime", "file_hash",
+        "spreadsheet_id", "pdf_file_id", "last_sync",
+    }
+
+
+def test_init_migrates_old_schema_by_adding_pdf_file_id(tmp_path):
+    """pdf_file_id カラムが無い旧DBを開いた際、ALTER TABLE で追加されること。"""
+    import sqlite3
+    db_path = tmp_path / "legacy.db"
+
+    # 旧スキーマ（pdf_file_id なし）でテーブルを作成
+    conn = sqlite3.connect(str(db_path))
+    conn.execute("""
+        CREATE TABLE file_states (
+            file_path TEXT PRIMARY KEY,
+            mtime REAL NOT NULL,
+            file_hash TEXT NOT NULL,
+            spreadsheet_id TEXT NOT NULL DEFAULT '',
+            last_sync REAL NOT NULL DEFAULT 0
+        )
+    """)
+    conn.execute(
+        "INSERT INTO file_states VALUES (?, ?, ?, ?, ?)",
+        ("/nas/legacy.xlsx", 1700000000.0, "legacy-hash", "legacy-sheet", 0),
+    )
+    conn.commit()
+    conn.close()
+
+    # StateDB 初期化で自動マイグレーションされるはず
+    db = StateDB(db_path=db_path)
+    state = db.get_state("/nas/legacy.xlsx")
+    db.close()
+
+    assert state is not None
+    assert state.spreadsheet_id == "legacy-sheet"
+    assert state.pdf_file_id == ""  # 既存行は空文字で補完される
 
 
 def test_init_is_idempotent(tmp_path):
@@ -154,6 +190,39 @@ def test_update_state_updates_spreadsheet_id(db):
     result = db.get_state("/nas/file.xlsx")
     assert result is not None
     assert result.spreadsheet_id == "new-sheet-id"
+
+
+def test_update_state_persists_pdf_file_id(db):
+    """update_stateでpdf_file_idを登録・更新できること。"""
+    db.update_state(
+        file_path="/nas/f.xlsx",
+        mtime=1.0,
+        file_hash="h1",
+        spreadsheet_id="sheet-1",
+        pdf_file_id="pdf-1",
+    )
+    state = db.get_state("/nas/f.xlsx")
+    assert state is not None
+    assert state.pdf_file_id == "pdf-1"
+
+    db.update_state(
+        file_path="/nas/f.xlsx",
+        mtime=2.0,
+        file_hash="h2",
+        spreadsheet_id="sheet-1",
+        pdf_file_id="pdf-2",
+    )
+    state = db.get_state("/nas/f.xlsx")
+    assert state is not None
+    assert state.pdf_file_id == "pdf-2"
+
+
+def test_update_state_defaults_pdf_file_id_to_empty(db):
+    """pdf_file_id を省略した場合、空文字で保存されること（後方互換）。"""
+    db.update_state("/nas/g.xlsx", 1.0, "h", "sheet-id")
+    state = db.get_state("/nas/g.xlsx")
+    assert state is not None
+    assert state.pdf_file_id == ""
 
 
 # ---------------------------------------------------------------------------

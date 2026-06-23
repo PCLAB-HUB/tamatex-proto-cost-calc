@@ -1,35 +1,52 @@
 nas:
-  # NASのマウントパス（Windowsドライブレター or UNCパス）
-  # 例: "Z:\\共有\\Excel" or "\\\\192.168.1.100\\shared\\excel"
-  base_path: "Z:\\共有\\Excel"
+  # NASのマウントパス（UNCパス推奨。ドライブレターはサービス実行時に引き継がれない）
+  # 例: "\\\\Tamatex-nas8tb\\共有フォルダ\\Excel" or "Z:\\共有\\Excel"
+  base_path: "\\\\Tamatex-nas8tb\\共有フォルダ\\Excel"
   file_patterns:
     - "*.xlsx"
   exclude_patterns:
     - "~$*"
     - "*.tmp"
     - ".~lock*"
-  # SMB認証（Windowsサービスで動かす場合に必須。対話ログインユーザーの
-  # credentialキャッシュを共有できないため、明示的に認証を渡す）。
-  # 省略可（GUIユーザーのキャッシュに頼る場合など）。
-  # auth:
-  #   server: "Tamatex-nas8tb"
-  #   username: "admin"
-  #   password: "your-nas-password"
+  # SMB認証（Windowsサービスとして動かす場合は必須）。
+  # サービスは LocalSystem 等で動作するため対話ログインのcredentialキャッシュを共有しない。
+  # アプリ起動時に net use で認証セッションを確立する。
+  # GUI ユーザー実行時のキャッシュに頼る場合のみ省略可。
+  auth:
+    server: "Tamatex-nas8tb"
+    username: "admin"
+    password: "your-nas-password"
 
 google:
-  # サービスアカウントのJSONキーファイルパス
+  # サービスアカウントのJSONキーファイルパス（相対パスはサービスのStartup directory基準）
   credentials_path: "./config/service_account.json"
-  # 同期先Google DriveフォルダID（空なら自動作成）
+  # 同期先Google DriveフォルダID（共有ドライブ推奨）
+  # ※ 初回同期時に配下に Sheets/ と PDF/ サブフォルダが自動作成されます
   drive_folder_id: ""
-  # スプレッドシートを共有するメールアドレス一覧
+  # スプレッドシート・PDFの閲覧者として共有するメールアドレス一覧
+  # 毎回の同期サイクルで冪等に適用される（既に共有済みなら何もしない）
   share_with: []
     # - "sales@example.com"
     # - "executive@example.com"
 
 sync:
+  # スケジュール方式を選択:
+  #   mode: interval (デフォルト) → interval_minutes 分ごとに同期
+  #   mode: times              → 指定時刻（HH:MM）に同期
+  # サービス起動直後は mode に関わらず必ず1回即時同期する。
+  # PC起動時の自動同期に使える（朝の同期はこれで担保）。
+
+  mode: interval
   interval_minutes: 15
+
+  # times モードの例（mode: times に切り替えて使用）:
+  # mode: times
+  # times:
+  #   - "12:00"
+  #   - "15:00"
+
   # 状態DBファイルのパス（空なら設定ファイルと同じディレクトリに自動作成）
-  # state_db_path: "C:\\tamatex\\tamatex_state.db"
+  # state_db_path: "C:\\nas-googlesync\\config\\tamatex_state.db"
 
 logging:
   level: "INFO"

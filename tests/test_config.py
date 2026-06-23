@@ -340,3 +340,98 @@ def test_syncconfig_is_frozen():
 
     with pytest.raises((AttributeError, TypeError)):
         config.interval_minutes = 99
+
+
+# ---------------------------------------------------------------------------
+# sync.mode = "times" バリデーション
+# ---------------------------------------------------------------------------
+
+def test_load_config_accepts_times_mode_with_valid_times(tmp_path):
+    """sync.mode='times' と正しい時刻リストが受理されること。"""
+    yaml_content = """
+nas:
+  base_path: /nas
+google:
+  credentials_path: /creds.json
+sync:
+  mode: times
+  times:
+    - "12:00"
+    - "15:00"
+"""
+    config = load_config(_write_yaml(tmp_path, yaml_content))
+    assert config.sync.mode == "times"
+    assert config.sync.times == ["12:00", "15:00"]
+
+
+def test_load_config_defaults_to_interval_mode(tmp_path):
+    """mode 未指定なら 'interval' がデフォルトで、従来通り動作すること。"""
+    yaml_content = """
+nas:
+  base_path: /nas
+google:
+  credentials_path: /creds.json
+sync:
+  interval_minutes: 30
+"""
+    config = load_config(_write_yaml(tmp_path, yaml_content))
+    assert config.sync.mode == "interval"
+    assert config.sync.interval_minutes == 30
+
+
+def test_load_config_rejects_invalid_mode(tmp_path):
+    """不正な mode 値はエラーになること。"""
+    yaml_content = """
+nas:
+  base_path: /nas
+google:
+  credentials_path: /creds.json
+sync:
+  mode: cron
+"""
+    with pytest.raises(ValueError, match="sync.mode"):
+        load_config(_write_yaml(tmp_path, yaml_content))
+
+
+def test_load_config_rejects_times_mode_without_times(tmp_path):
+    """mode='times' で times が空ならエラーになること。"""
+    yaml_content = """
+nas:
+  base_path: /nas
+google:
+  credentials_path: /creds.json
+sync:
+  mode: times
+"""
+    with pytest.raises(ValueError, match="少なくとも1つ"):
+        load_config(_write_yaml(tmp_path, yaml_content))
+
+
+def test_load_config_rejects_invalid_time_format(tmp_path):
+    """times に不正な形式（25:00、12:60、12.00 等）が含まれたらエラー。"""
+    yaml_content = """
+nas:
+  base_path: /nas
+google:
+  credentials_path: /creds.json
+sync:
+  mode: times
+  times:
+    - "25:00"
+"""
+    with pytest.raises(ValueError, match="HH:MM"):
+        load_config(_write_yaml(tmp_path, yaml_content))
+
+
+def test_load_config_rejects_zero_interval(tmp_path):
+    """interval mode で interval_minutes=0 はエラーになること。"""
+    yaml_content = """
+nas:
+  base_path: /nas
+google:
+  credentials_path: /creds.json
+sync:
+  interval_minutes: 0
+"""
+    with pytest.raises(ValueError, match="interval_minutes"):
+        load_config(_write_yaml(tmp_path, yaml_content))
