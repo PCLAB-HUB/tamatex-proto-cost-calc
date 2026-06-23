@@ -12,6 +12,7 @@ list / get / save / update / delete / duplicate / exists / close の
 from __future__ import annotations
 
 import sqlite3
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -83,8 +84,10 @@ class ScenarioRepository:
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         # check_same_thread=False: Streamlit は各スクリプト実行で別スレッドを生成するが、
         # @st.cache_resource でシングルトン化した ScenarioRepository を再利用するため、
-        # 別スレッドからの使用を許可する必要がある。書き込みは Streamlit の単一スクリプト
-        # 実行フロー内で排他されるため、個別ロックは不要。
+        # 別スレッドからの使用を許可する必要がある。複数セッション/タブからの同時
+        # アクセスに備え、全 CRUD 操作を _lock（RLock）で直列化する。RLock にする
+        # ことで duplicate→save / update→get のメソッド間再入も安全に行える。
+        self._lock = threading.RLock()
         self._conn = sqlite3.connect(str(self._db_path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._init_schema()
@@ -95,20 +98,21 @@ class ScenarioRepository:
 
     def _init_schema(self) -> None:
         """初回接続時にテーブルとインデックスを作成する（冪等）."""
-        self._conn.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS scenarios (
-                id             INTEGER PRIMARY KEY AUTOINCREMENT,
-                name           TEXT    NOT NULL UNIQUE,
-                created_at     TEXT    NOT NULL,
-                updated_at     TEXT    NOT NULL,
-                condition_json TEXT    NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS idx_scenarios_updated
-                ON scenarios (updated_at DESC);
-            """
-        )
-        self._conn.commit()
+        with self._lock:
+            self._conn.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS scenarios (
+                    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name           TEXT    NOT NULL UNIQUE,
+                    created_at     TEXT    NOT NULL,
+                    updated_at     TEXT    NOT NULL,
+                    condition_json TEXT    NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_scenarios_updated
+                    ON scenarios (updated_at DESC);
+                """
+            )
+            self._conn.commit()
 
     # ------------------------------------------------------------------
     # 内部ユーティリティ
@@ -129,19 +133,20 @@ class ScenarioRepository:
         Returns:
             ScenarioMeta のリスト。シナリオが存在しない場合は空リスト。
         """
-        cur = self._conn.execute(
-            "SELECT id, name, created_at, updated_at "
-            "FROM scenarios ORDER BY updated_at DESC"
-        )
-        return [
-            ScenarioMeta(
-                id=row["id"],
-                name=row["name"],
-                created_at=row["created_at"],
-                updated_at=row["updated_at"],
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT id, name, created_at, updated_at "
+                "FROM scenarios ORDER BY updated_at DESC"
             )
-            for row in cur.fetchall()
-        ]
+            return [
+                ScenarioMeta(
+                    id=row["id"],
+                    name=row["name"],
+                    created_at=row["created_at"],
+                    updated_at=row["updated_at"],
+                )
+                for row in cur.fetchall()
+            ]
 
     def get_scenario(self, id: int) -> Scenario:
         """指定 id のシナリオを完全データで返す.
@@ -155,12 +160,13 @@ class ScenarioRepository:
         Raises:
             ScenarioNotFoundError: 指定 id が存在しない場合。
         """
-        cur = self._conn.execute(
-            "SELECT id, name, created_at, updated_at, condition_json "
-            "FROM scenarios WHERE id = ?",
-            (id,),
-        )
-        row = cur.fetchone()
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT id, name, created_at, updated_at, condition_json "
+                "FROM scenarios WHERE id = ?",
+                (id,),
+            )
+            row = cur.fetchone()
         if row is None:
             raise ScenarioNotFoundError(f"Scenario id={id} not found")
         return Scenario(
@@ -185,18 +191,21 @@ class ScenarioRepository:
             ScenarioNameConflictError: 同名シナリオが既に存在する場合。
         """
         now = self._now()
-        try:
-            cur = self._conn.execute(
-                "INSERT INTO scenarios (name, created_at, updated_at, condition_json) "
-                "VALUES (?, ?, ?, ?)",
-                (name, now, now, condition_to_json(cond)),
-            )
-            self._conn.commit()
-            return cur.lastrowid  # type: ignore[return-value]
-        except sqlite3.IntegrityError as exc:
-            raise ScenarioNameConflictError(
-                f"Scenario name '{name}' already exists"
-            ) from exc
+        condition_json = condition_to_json(cond)
+        with self._lock:
+            try:
+                cur = self._conn.execute(
+                    "INSERT INTO scenarios (name, created_at, updated_at, condition_json) "
+                    "VALUES (?, ?, ?, ?)",
+                    (name, now, now, condition_json),
+                )
+                self._conn.commit()
+                return cur.lastrowid  # type: ignore[return-value]
+            except sqlite3.IntegrityError as exc:
+                self._conn.rollback()
+                raise ScenarioNameConflictError(
+                    f"Scenario name '{name}' already exists"
+                ) from exc
 
     def update_scenario(
         self,
@@ -216,11 +225,10 @@ class ScenarioRepository:
             ScenarioNotFoundError: 指定 id が存在しない場合。
             ScenarioNameConflictError: 変更後の name が他シナリオと衝突する場合。
         """
-        # 対象の存在確認（get_scenario は not found 時に例外送出）
-        self.get_scenario(id)
-
         if name is None and cond is None:
-            return  # 更新するものがない場合は早期リターン
+            # 対象の存在確認のみ行い、更新するものがなければ早期リターン
+            self.get_scenario(id)
+            return
 
         sets: list[str] = ["updated_at = ?"]
         params: list[object] = [self._now()]
@@ -232,15 +240,19 @@ class ScenarioRepository:
             sets.append("condition_json = ?")
             params.append(condition_to_json(cond))
 
-        params.append(id)
         sql = f"UPDATE scenarios SET {', '.join(sets)} WHERE id = ?"  # noqa: S608
-        try:
-            self._conn.execute(sql, params)
-            self._conn.commit()
-        except sqlite3.IntegrityError as exc:
-            raise ScenarioNameConflictError(
-                f"Scenario name '{name}' already exists"
-            ) from exc
+        with self._lock:
+            # 対象の存在確認（get_scenario は not found 時に例外送出 / RLock 再入）
+            self.get_scenario(id)
+            params.append(id)
+            try:
+                self._conn.execute(sql, params)
+                self._conn.commit()
+            except sqlite3.IntegrityError as exc:
+                self._conn.rollback()
+                raise ScenarioNameConflictError(
+                    f"Scenario name '{name}' already exists"
+                ) from exc
 
     def delete_scenario(self, id: int) -> None:
         """指定 id のシナリオを削除する.
@@ -250,8 +262,9 @@ class ScenarioRepository:
         Args:
             id: 削除対象のシナリオ ID。
         """
-        self._conn.execute("DELETE FROM scenarios WHERE id = ?", (id,))
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute("DELETE FROM scenarios WHERE id = ?", (id,))
+            self._conn.commit()
 
     def duplicate_scenario(self, id: int, new_name: str) -> int:
         """既存シナリオを新しい名前でコピーし、新しい id を返す.
@@ -267,8 +280,10 @@ class ScenarioRepository:
             ScenarioNotFoundError: コピー元 id が存在しない場合。
             ScenarioNameConflictError: new_name が既に存在する場合。
         """
-        original = self.get_scenario(id)
-        return self.save_scenario(new_name, original.condition)
+        with self._lock:
+            # get→save をアトミックに行うため Lock 内で実行（RLock 再入）
+            original = self.get_scenario(id)
+            return self.save_scenario(new_name, original.condition)
 
     def scenario_exists(self, name: str) -> bool:
         """指定名のシナリオが存在するかを返す.
@@ -281,11 +296,13 @@ class ScenarioRepository:
         Returns:
             存在する場合 True、存在しない場合 False。
         """
-        cur = self._conn.execute(
-            "SELECT 1 FROM scenarios WHERE name = ? LIMIT 1", (name,)
-        )
-        return cur.fetchone() is not None
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT 1 FROM scenarios WHERE name = ? LIMIT 1", (name,)
+            )
+            return cur.fetchone() is not None
 
     def close(self) -> None:
         """SQLite コネクションをクローズする."""
-        self._conn.close()
+        with self._lock:
+            self._conn.close()

@@ -322,3 +322,75 @@ class TestSchema:
         repo = ScenarioRepository(deep_path)
         repo.close()
         assert deep_path.exists()
+
+
+# ---------------------------------------------------------------------------
+# CONCURRENCY（共有コネクションの並行アクセス耐性）
+# ---------------------------------------------------------------------------
+
+
+class TestConcurrency:
+    """複数スレッドからの同時アクセスに対する堅牢性.
+
+    Streamlit は複数タブ/セッションで `@st.cache_resource` のシングルトン
+    リポジトリを共有しうる。RLock が無いと同一 SQLite コネクションへの
+    並行アクセスで間欠的なエラーが起きる。
+    """
+
+    def test_concurrent_saves_no_error(self, tmp_path: Path) -> None:
+        """複数スレッドが同時に save しても sqlite エラーなく全件保存される."""
+        import threading
+
+        repo = ScenarioRepository(tmp_path / "concurrent.db")
+        errors: list[Exception] = []
+
+        def worker(i: int) -> None:
+            try:
+                repo.save_scenario(f"シナリオ{i:03d}", COND_20FT)
+            except Exception as exc:  # noqa: BLE001
+                errors.append(exc)
+
+        threads = [threading.Thread(target=worker, args=(i,)) for i in range(20)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert errors == [], f"並行保存でエラー発生: {errors}"
+        assert len(repo.list_scenarios()) == 20
+        repo.close()
+
+    def test_concurrent_mixed_ops_no_error(self, tmp_path: Path) -> None:
+        """save / list を並行実行してもエラーなく整合する."""
+        import threading
+
+        repo = ScenarioRepository(tmp_path / "mixed.db")
+        for i in range(10):
+            repo.save_scenario(f"初期{i:03d}", COND_20FT)
+
+        errors: list[Exception] = []
+
+        def saver(i: int) -> None:
+            try:
+                repo.save_scenario(f"追加{i:03d}", COND_40FT)
+            except Exception as exc:  # noqa: BLE001
+                errors.append(exc)
+
+        def lister() -> None:
+            try:
+                repo.list_scenarios()
+            except Exception as exc:  # noqa: BLE001
+                errors.append(exc)
+
+        threads: list[threading.Thread] = []
+        for i in range(10):
+            threads.append(threading.Thread(target=saver, args=(i,)))
+            threads.append(threading.Thread(target=lister))
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert errors == [], f"並行操作でエラー発生: {errors}"
+        assert len(repo.list_scenarios()) == 20
+        repo.close()

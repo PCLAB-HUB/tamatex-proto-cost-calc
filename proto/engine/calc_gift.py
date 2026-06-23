@@ -16,8 +16,6 @@ Excel式の為替参照:
 
 from __future__ import annotations
 
-import math
-
 from proto.engine.calc_import import (
     calc_import_cost_total,
     calc_import_cost_unit,
@@ -30,6 +28,7 @@ from proto.engine.models import (
     SingleItem,
     SingleItemResult,
 )
+from proto.engine.rounding import roundup_yen
 
 
 def calc_gift_set(
@@ -151,7 +150,8 @@ def calc_gift_set(
 
     # --- M列: 見積単価 ---
     # M = ROUNDUP(P × (1 + マージン率), 0)
-    quote_price = math.ceil(manufacturing_cost * (1.0 + margin_rate))
+    # float の表現誤差で 1 円過大になるのを防ぐため roundup_yen を使う。
+    quote_price = roundup_yen(manufacturing_cost * (1.0 + margin_rate))
 
     # --- F列: 上代掛率 ---
     # F = E / D
