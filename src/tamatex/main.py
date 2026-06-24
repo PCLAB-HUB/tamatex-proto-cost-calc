@@ -272,15 +272,30 @@ def sync_cycle(
 
     # 4. NAS削除のDrive追従（一括消失ガード付き）
     deleted = changes.deleted_paths
-    if deleted:
+    if deleted and _event.is_set():
+        # 破壊的操作の保護: 停止要求が出ているサイクルでは削除を行わない。
+        logger.info("シャットダウン要求のため削除伝播をスキップ（%d件保留）", len(deleted))
+    elif deleted:
         if _is_mass_deletion(len(deleted), changes.stored_total):
             logger.warning(
                 "一括消失ガード発動: 削除候補=%d件 / 登録総数=%d件。"
-                "NAS部分障害の可能性があるため今サイクルの削除をスキップします。",
+                "NAS部分障害または大規模整理の可能性があるため今サイクルの削除を保留します"
+                "（Drive上のファイルは保持。意図した一括削除なら運用者の確認が必要）。",
                 len(deleted), changes.stored_total,
             )
         else:
             for deleted_path in deleted:
+                if _event.is_set():
+                    logger.info("シャットダウン要求のため削除伝播を中断")
+                    break
+                # 誤削除防止: 走査時に一時スキップ（保存中・一時I/Oエラー）された
+                # だけで実体がまだNASに在るファイルは削除扱いにしない（URL維持）。
+                if Path(deleted_path).exists():
+                    logger.warning(
+                        "削除検知だが実体が存在するため保留（走査時の一時スキップと判断）: %s",
+                        deleted_path,
+                    )
+                    continue
                 try:
                     state = state_db.get_state(deleted_path)
                     if state:

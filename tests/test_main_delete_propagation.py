@@ -1,5 +1,6 @@
 """main.py の削除伝播・一括消失ガードのテスト。"""
 
+import threading
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -148,6 +149,45 @@ def test_sync_cycle_skips_everything_when_nas_disconnected(cfg):
     with patch("tamatex.main.scan_files", return_value=[]), \
          patch("tamatex.main.trash_file") as mock_trash:
         sync_cycle(cfg, state_db, svc, "sheets-root", "pdf-root")
+
+    mock_trash.assert_not_called()
+    state_db.remove_state.assert_not_called()
+
+
+def test_sync_cycle_skips_trash_when_file_still_exists(cfg, tmp_path):
+    """走査で一時スキップされただけで実体がNASに在るファイルは trash しない（誤削除防止）。"""
+    svc = MagicMock()
+    state_db = MagicMock()
+    state_db.get_state.side_effect = lambda p: _state("sheet-x", "pdf-x")
+    # 保存中・一時I/Oエラー等で走査スキップされたが実体は残っている想定
+    real = tmp_path / "still_here.xlsx"
+    real.write_text("x")
+    fake = ChangeResult([], [], [str(real)], stored_total=10)
+
+    with patch("tamatex.main.scan_files",
+               return_value=[FileInfo("/nas/keep.xlsx", 1.0, "h")]), \
+         patch("tamatex.main.detect_changes", return_value=fake), \
+         patch("tamatex.main.trash_file") as mock_trash:
+        sync_cycle(cfg, state_db, svc, "sheets-root", "pdf-root")
+
+    mock_trash.assert_not_called()
+    state_db.remove_state.assert_not_called()
+
+
+def test_sync_cycle_skips_deletion_when_shutdown_requested(cfg):
+    """shutdown 要求中は削除伝播を行わない（破壊的操作の保護）。"""
+    svc = MagicMock()
+    state_db = MagicMock()
+    state_db.get_state.side_effect = lambda p: _state("s", "p")
+    fake = ChangeResult([], [], ["/nas/gone.xlsx"], stored_total=10)
+    ev = threading.Event()
+    ev.set()
+
+    with patch("tamatex.main.scan_files",
+               return_value=[FileInfo("/nas/keep.xlsx", 1.0, "h")]), \
+         patch("tamatex.main.detect_changes", return_value=fake), \
+         patch("tamatex.main.trash_file") as mock_trash:
+        sync_cycle(cfg, state_db, svc, "sheets-root", "pdf-root", shutdown_event=ev)
 
     mock_trash.assert_not_called()
     state_db.remove_state.assert_not_called()
