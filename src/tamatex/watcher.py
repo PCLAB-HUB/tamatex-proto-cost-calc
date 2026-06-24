@@ -3,6 +3,7 @@
 import fnmatch
 import hashlib
 import logging
+import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -61,13 +62,22 @@ def scan_files(
     base_resolved = base.resolve()
     files: list[FileInfo] = []
     scan_complete = True
-    for pattern in file_patterns:
-        for file_path in base.rglob(pattern):
-            if not file_path.is_file():
+    def _on_walk_error(err: OSError) -> None:
+        # ディレクトリ列挙の失敗（os.scandir の OSError）。Path.rglob は
+        # これを黙ってサブツリーごと飛ばし、部分結果を完全スキャンに見せて
+        # しまうため、os.walk(onerror=) で捕捉して走査不完全を記録する。
+        nonlocal scan_complete
+        logger.warning("ディレクトリ走査エラー（サブツリーをスキップ）: %s", err)
+        scan_complete = False
+
+    for dirpath, _dirnames, filenames in os.walk(base, onerror=_on_walk_error):
+        for fname in filenames:
+            if not _matches_any(fname, file_patterns):
                 continue
-            if _matches_any(file_path.name, exclude_patterns):
-                logger.debug("除外: %s", file_path.name)
+            if _matches_any(fname, exclude_patterns):
+                logger.debug("除外: %s", fname)
                 continue
+            file_path = Path(dirpath) / fname
             try:
                 resolved = file_path.resolve()
                 # シンボリックリンクによるbase_path外への追跡を防止
@@ -75,6 +85,8 @@ def scan_files(
                     resolved.relative_to(base_resolved)
                 except ValueError:
                     logger.warning("base_path外のファイル（スキップ）: %s -> %s", file_path, resolved)
+                    continue
+                if not resolved.is_file():
                     continue
                 mtime_before = resolved.stat().st_mtime
                 file_hash = _compute_file_hash(resolved)

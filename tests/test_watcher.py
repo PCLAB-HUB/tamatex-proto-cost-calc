@@ -390,3 +390,24 @@ def test_scan_files_reports_incomplete_on_read_error(nas_dir, monkeypatch):
     files, complete = scan_files(str(nas_dir), ["*.xlsx"], [])
     assert complete is False
     assert files == []
+
+
+def test_scan_files_reports_incomplete_on_directory_enumeration_error(nas_dir, monkeypatch):
+    """ディレクトリ列挙の失敗（os.walk onerror）でも走査完全フラグは False。"""
+    (nas_dir / "a.xlsx").write_text("data")
+
+    import os as _os
+    real_walk = _os.walk
+
+    def fake_walk(top, onerror=None, **kwargs):
+        # サブディレクトリの scandir 失敗を模す（rglob は黙殺してしまうケース）
+        if onerror is not None:
+            onerror(OSError("simulated scandir failure"))
+        yield from real_walk(top, onerror=onerror, **kwargs)
+
+    monkeypatch.setattr(_os, "walk", fake_walk)
+
+    files, complete = scan_files(str(nas_dir), ["*.xlsx"], [])
+    assert complete is False
+    # 列挙できた分は返る（部分結果）が、完全フラグで不完全を伝える
+    assert any(fi.path.endswith("a.xlsx") for fi in files)
