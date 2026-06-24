@@ -358,27 +358,20 @@ def sync_cycle(
                     "削除候補を保留（次サイクルで不在を再確認）: %s", deleted_path
                 )
             for deleted_path in confirmed:
+                # 削除はファイル単位で原子的に扱う。停止要求後は新たなファイルの
+                # 削除を開始しないが、開始したファイルは中断せず Sheets/PDF の
+                # trash と state 削除まで完遂する（途中中断による半trash＝state が
+                # trash済みDriveを指す不整合を防ぐ）。
                 if _event.is_set():
-                    logger.info("シャットダウン要求のため削除伝播を中断")
+                    logger.info("シャットダウン要求のため以降の削除伝播を中断")
                     break
                 try:
                     state = state_db.get_state(deleted_path)
                     if state:
-                        # 各破壊的操作の直前で停止要求を再確認し、
-                        # shutdown後に新たなtrash/state削除を開始しない。
                         if state.spreadsheet_id:
-                            if _event.is_set():
-                                break
                             trash_file(service, state.spreadsheet_id)
                         if state.pdf_file_id:
-                            if _event.is_set():
-                                break
                             trash_file(service, state.pdf_file_id)
-                    if _event.is_set():
-                        logger.info(
-                            "シャットダウン要求のため state 削除を中断: %s", deleted_path
-                        )
-                        break
                     state_db.remove_state(deleted_path)
                     logger.info(
                         "NAS削除を追従（2サイクル確認済み・Driveゴミ箱へ移動）: %s",

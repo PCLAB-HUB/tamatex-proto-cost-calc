@@ -201,28 +201,32 @@ def test_sync_cycle_skips_deletion_when_shutdown_requested(cfg):
     state_db.remove_state.assert_not_called()
 
 
-def test_sync_cycle_aborts_mid_deletion_on_shutdown(cfg):
-    """削除1件の処理中にshutdownが入ったら以降の破壊的操作を行わない。"""
+def test_sync_cycle_completes_current_file_then_stops_on_shutdown(cfg):
+    """削除はファイル単位で原子的: 処理中ファイルは完遂し、shutdown後は次を開始しない。"""
     svc = MagicMock()
     state_db = MagicMock()
-    state_db.get_state.side_effect = lambda p: _state("sheet-del", "pdf-del")
-    fake = ChangeResult([], [], ["/nas/gone.xlsx"], stored_total=10)
-    ev = threading.Event()  # 開始時はクリア
+    state_db.get_state.side_effect = lambda p: _state(f"sheet-{p}", f"pdf-{p}")
+    deleted = ["/nas/gone1.xlsx", "/nas/gone2.xlsx"]
+    fake = ChangeResult([], [], deleted, stored_total=10)
+    ev = threading.Event()  # 開始時クリア
+
+    calls = []
 
     def trash_side_effect(service, fid):
-        # 1つ目のtrash中にSIGTERM相当が入った状況を模す
-        ev.set()
+        calls.append(fid)
+        ev.set()  # 最初のtrashでSIGTERM相当が入った状況を模す
 
     with patch("tamatex.main.scan_files",
                return_value=([FileInfo("/nas/keep.xlsx", 1.0, "h")], True)), \
          patch("tamatex.main.detect_changes", return_value=fake), \
-         patch("tamatex.main.trash_file", side_effect=trash_side_effect) as mock_trash:
+         patch("tamatex.main.trash_file", side_effect=trash_side_effect):
         sync_cycle(cfg, state_db, svc, "sheets-root", "pdf-root", shutdown_event=ev,
-                   pending_deletions={"/nas/gone.xlsx"})
+                   pending_deletions=set(deleted))
 
-    # Sheets trashは1回走るが、その後shutdownを見てPDF trashとstate削除は行わない
-    assert mock_trash.call_count == 1
-    state_db.remove_state.assert_not_called()
+    # 1ファイル目(gone1)は Sheets+PDF とも trash し state削除まで完遂、
+    # 2ファイル目(gone2)は shutdown 後なので開始しない。
+    assert calls == ["sheet-/nas/gone1.xlsx", "pdf-/nas/gone1.xlsx"]
+    state_db.remove_state.assert_called_once_with("/nas/gone1.xlsx")
 
 
 # ---------------------------------------------------------------------------
