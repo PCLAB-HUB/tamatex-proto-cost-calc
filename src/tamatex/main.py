@@ -309,13 +309,15 @@ def sync_cycle(
 
     # 4. NAS削除のDrive追従（2サイクル確認＋一括消失ガード）
     deleted = changes.deleted_paths
-    if not scan_complete:
-        # 走査が不完全（部分I/O障害）なサイクルは削除確認として信頼できない。
-        # 連続性を切るため pending をリセットし、削除伝播は行わない。
+    if not scan_complete or stats["errors"] > 0:
+        # 走査不完全（部分I/O障害）、または同期処理でエラーが出たサイクルは、
+        # 削除確認として信頼できない（NAS/Drive 劣化の兆候）。連続性を切るため
+        # pending をリセットし、削除伝播は行わない。
         if deleted:
             logger.warning(
-                "走査不完全のため削除伝播を保留し2サイクル確認をリセット（%d件）",
-                len(deleted),
+                "走査不完全または同期エラーのため削除伝播を保留し2サイクル確認をリセット"
+                "（削除候補=%d件, errors=%d, 走査完全=%s）",
+                len(deleted), stats["errors"], scan_complete,
             )
         _pending.clear()
     elif deleted and _event.is_set():

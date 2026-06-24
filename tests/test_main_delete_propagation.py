@@ -389,3 +389,28 @@ def test_run_sync_cycle_clears_pending_on_exception(cfg):
                         pending_deletions=pending)
 
     assert pending == set()
+
+
+def test_sync_cycle_skips_deletion_when_sync_had_errors(cfg):
+    """同期処理でエラーが出たサイクルは削除伝播せず pending をリセットする。"""
+    svc = MagicMock()
+    state_db = MagicMock()
+    state_db.get_state.side_effect = lambda p: _state("s", "p")
+    pending: set[str] = {"/nas/gone.xlsx"}
+    # 新規ファイル1件（同期対象・upsertで失敗させる）＋削除候補1件
+    new_file = FileInfo("/nas/new.xlsx", 1.0, "h")
+    fake = ChangeResult([new_file], [], ["/nas/gone.xlsx"], stored_total=10)
+
+    with patch("tamatex.main.scan_files",
+               return_value=([new_file], True)), \
+         patch("tamatex.main.detect_changes", return_value=fake), \
+         patch("tamatex.main._resolve_target_folders",
+               return_value=("sheets-root", "pdf-root")), \
+         patch("tamatex.main.upsert_sheet", side_effect=RuntimeError("drive down")), \
+         patch("tamatex.main.trash_file") as mock_trash:
+        sync_cycle(cfg, state_db, svc, "sheets-root", "pdf-root",
+                   pending_deletions=pending)
+
+    mock_trash.assert_not_called()
+    state_db.remove_state.assert_not_called()
+    assert pending == set()
