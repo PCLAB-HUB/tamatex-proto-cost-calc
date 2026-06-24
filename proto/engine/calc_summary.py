@@ -33,7 +33,9 @@ def calc_summary(
     total_quantity = sum(g.sales_quantity for g in gifts)
     total_sales = sum(r.sales_amount for r in results)
     total_profit = sum(r.profit_amount for r in results)
-    avg_profit_rate = total_profit / total_sales if total_sales > 0 else 0.0
+    # 売上0では粗利率が計算不能（0除算）。0% と表示すると赤字が中立に
+    # 見えてしまうため None（計算不能）を返す。
+    avg_profit_rate = total_profit / total_sales if total_sales > 0 else None
 
     return SummaryResult(
         total_quantity=total_quantity,

@@ -47,14 +47,12 @@ class SingleItem:
     material_plate_1: float = 0.0  # 資材版1 (AY列)
     material_plate_2: float = 0.0  # 資材版2 (AZ列)
     material_plate_3: float = 0.0  # 資材版3 (BA列)
-    # 物流(CI-CO列) — 一部の単品のみ値あり
+    # 物流(CI/CJ/CK/CO列) — 品目固有。CL/CM/CN(入出庫/保管/月数)は品目に
+    # よらず条件側 ImportCondition.logistics_single が一括で保持する。
     logistics_pcs_per_case: int = 0       # BX/CO列
     logistics_freight: float = 0.0         # CI列
     logistics_packing: float = 0.0         # CJ列
     logistics_other: float = 0.0           # CK列
-    logistics_cl: float = 0.0              # CL列
-    logistics_cm: float = 0.0              # CM列
-    logistics_cn: float = 0.0              # CN列
 
 
 # ---------------------------------------------------------------------------
@@ -104,10 +102,24 @@ class GiftSet:
     freight_per_case: float          # 運賃/ケース(円) (CI列)
     packing_cost: float              # 梱包(円) (CJ列)
     other_logistics: float           # その他物流(円) (CK列)
-    # 物流追加（CL, CM, CN列 — 入出庫・保管計算用）
-    logistics_cl: float = 0.0        # (CL列)
-    logistics_cm: float = 0.0        # (CM列)
-    logistics_cn: float = 0.0        # (CN列)
+    # CL/CM/CN(入出庫/保管/月数)は条件側 ImportCondition.logistics_gift が保持する。
+
+
+# ---------------------------------------------------------------------------
+# 物流パラメータ（入出庫・保管料・月数）
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class LogisticsParams:
+    """物流の入出庫・保管パラメータ（単品/ギフト別、コンテナ非依存）.
+
+    Excel ひな形の CL列(入出庫)/CM列(保管料)/CN列(月数)に対応する。
+    倉庫料金はケース単位のため 20FT/40FT で共通で、単品/ギフトの区分で決まる
+    （単品=$CL$6 系、ギフト=$CL$22 系。40FTギフトも $CL$22 を参照する）。
+    """
+
+    io_fee: float          # 入出庫(円/個) — CL列
+    storage_fee: float     # 保管料(円/個) — CM列
+    storage_months: float  # 保管月数 — CN列
 
 
 # ---------------------------------------------------------------------------
@@ -159,10 +171,10 @@ class ImportCondition:
     # 輸入経費11項目(円) — BM〜BW列（単品・ギフト別）
     import_expenses_single: ImportExpenses  # 単品用輸入経費
     import_expenses_gift: ImportExpenses    # ギフト用輸入経費
-    # 物流
-    io_fee: float                # 入出庫(円/個)
-    storage_fee: float           # 保管料(円/個)
-    storage_months: float        # ヶ月
+    # 物流（入出庫/保管料/月数。倉庫料金はケース単位でコンテナ非依存のため、
+    #  単品/ギフトの区分で持つ。Excel CL/CM/CN列）
+    logistics_single: LogisticsParams  # 単品用 (Excel $CL$6/$CM$6/$CN$6)
+    logistics_gift: LogisticsParams    # ギフト用 (Excel $CL$22/$CM$22/$CN$22)
 
 
 # ---------------------------------------------------------------------------
@@ -229,4 +241,4 @@ class SummaryResult:
     total_quantity: int           # 総数量 = I22
     total_sales: float            # 総売上 = K22
     total_profit: float           # 総粗利 = L22
-    avg_profit_rate: float        # 平均粗利率 = H22 = L22/K22
+    avg_profit_rate: float | None  # 平均粗利率 = H22 = L22/K22（売上0で None=計算不能）

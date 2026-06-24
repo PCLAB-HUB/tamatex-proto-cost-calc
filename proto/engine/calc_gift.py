@@ -16,8 +16,6 @@ Excel式の為替参照:
 
 from __future__ import annotations
 
-import math
-
 from proto.engine.calc_import import (
     calc_import_cost_total,
     calc_import_cost_unit,
@@ -30,6 +28,7 @@ from proto.engine.models import (
     SingleItem,
     SingleItemResult,
 )
+from proto.engine.rounding import roundup_yen
 
 
 def calc_gift_set(
@@ -138,9 +137,9 @@ def calc_gift_set(
         freight_per_case=gift.freight_per_case,
         packing_cost=gift.packing_cost,
         other_logistics=gift.other_logistics,
-        cl=gift.logistics_cl,
-        cm=gift.logistics_cm,
-        cn=gift.logistics_cn,
+        cl=cond.logistics_gift.io_fee,
+        cm=cond.logistics_gift.storage_fee,
+        cn=cond.logistics_gift.storage_months,
         pcs_per_case=gift.pcs_per_case,
     )
 
@@ -151,7 +150,8 @@ def calc_gift_set(
 
     # --- M列: 見積単価 ---
     # M = ROUNDUP(P × (1 + マージン率), 0)
-    quote_price = math.ceil(manufacturing_cost * (1.0 + margin_rate))
+    # float の表現誤差で 1 円過大になるのを防ぐため roundup_yen を使う。
+    quote_price = roundup_yen(manufacturing_cost * (1.0 + margin_rate))
 
     # --- F列: 上代掛率 ---
     # F = E / D
@@ -180,8 +180,10 @@ def calc_gift_set(
     sales_amount = gift.selling_price * gift.sales_quantity
 
     # --- L列: 粗利金額 ---
-    # L = K × H
-    profit_amount = sales_amount * gross_profit_rate
+    # Excel は L = K × H だが、selling_price=0 で粗利率を 0 に丸めると損失が
+    # 集計から消えてしまう（K×H = 0×0 = 0）。粗利率に依存せず
+    # gross_profit × 数量で算出する（selling_price>0 では K×H と数学的に同値）。
+    profit_amount = gross_profit * gift.sales_quantity
 
     return GiftSetResult(
         towel_cost=towel_cost,

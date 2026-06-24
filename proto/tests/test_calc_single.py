@@ -141,3 +141,29 @@ class TestSingleItemNoWeight:
         result = calc_single_item(ITEM_06, COND_20FT)
         assert result.loaded_pcs == 0.0
         assert result.manufacturing_cost == pytest.approx(142.5, abs=TOLERANCE)
+
+
+class TestLogisticsConditionWiring:
+    """物流条件(cond.logistics_single)が原価計算に反映される（Codex指摘1の回帰防止）.
+
+    以前は item.logistics_cl/cm/cn を直接使い cond の値が無視されていた。
+    cond 配線後は条件側の入出庫・保管料・月数を変えると物流費・原価が変わる。
+    """
+
+    def test_logistics_single_affects_cost(self):
+        from dataclasses import replace
+
+        from proto.engine.models import LogisticsParams
+
+        base = calc_single_item(ITEM_01, COND_20FT)
+        bumped = calc_single_item(
+            ITEM_01,
+            replace(
+                COND_20FT,
+                logistics_single=LogisticsParams(
+                    io_fee=9999.0, storage_fee=8888.0, storage_months=7.0
+                ),
+            ),
+        )
+        assert bumped.logistics_cost != base.logistics_cost
+        assert bumped.jpy_cost != base.jpy_cost

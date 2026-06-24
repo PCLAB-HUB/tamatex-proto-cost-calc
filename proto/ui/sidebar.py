@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
-
 import streamlit as st
 
 from proto.data.mock_params import COND_20FT, COND_40FT
-from proto.engine.models import ImportCondition, ImportExpenses
+from proto.engine.models import ImportCondition, ImportExpenses, LogisticsParams
+from proto.storage.scenario_repo import ScenarioNameConflictError, ScenarioRepository
+
+
+__all__ = [
+    "render_sidebar",
+    "apply_condition_to_session_state",
+]
 
 
 _CONDITIONS = {"20FT 大阪/今治": COND_20FT, "40FT 東京": COND_40FT}
@@ -67,13 +72,24 @@ def _edit_import_expenses(
     )
 
 
-def render_sidebar() -> ImportCondition:
-    """サイドバーを描画し、編集後の ImportCondition を返す."""
+def render_sidebar(repo: ScenarioRepository | None = None) -> ImportCondition:
+    """サイドバーを描画し、編集後の ImportCondition を返す.
+
+    Args:
+        repo: シナリオリポジトリ。None の場合は保存ボタンを表示しない。
+              既存の呼び出し箇所は引数なしでも動作する（後方互換性維持）。
+
+    Returns:
+        現在のサイドバー値を反映した ImportCondition インスタンス。
+    """
     st.sidebar.title("輸入条件設定")
 
     # --- コンテナ条件選択 ---
     selected = st.sidebar.radio(
-        "コンテナ条件", list(_CONDITIONS.keys()), horizontal=True
+        "コンテナ条件",
+        list(_CONDITIONS.keys()),
+        horizontal=True,
+        key="sidebar_container_radio",
     )
     base_cond = _CONDITIONS[selected]
 
@@ -83,7 +99,7 @@ def render_sidebar() -> ImportCondition:
     st.sidebar.divider()
 
     # --- 為替 ---
-    st.sidebar.subheader("為替レート")
+    st.sidebar.subheader("💱 為替レート")
     cols = st.sidebar.columns(2)
     internal_rate = cols[0].number_input(
         "社内為替 (円/$)", value=base_cond.internal_rate, step=1.0,
@@ -97,7 +113,7 @@ def render_sidebar() -> ImportCondition:
     st.sidebar.divider()
 
     # --- マージン・ロス率 ---
-    st.sidebar.subheader("マージン・ロス率")
+    st.sidebar.subheader("🎯 マージン・ロス率")
     cols2 = st.sidebar.columns(2)
     margin_pct = cols2[0].number_input(
         "マージン (%)", value=base_cond.margin_pct, step=1.0,
@@ -124,7 +140,7 @@ def render_sidebar() -> ImportCondition:
     st.sidebar.divider()
 
     # --- 輸入 ---
-    st.sidebar.subheader("輸入パラメータ")
+    st.sidebar.subheader("📦 輸入パラメータ")
     overseas_freight = st.sidebar.number_input(
         "海外運賃 (USD)", value=base_cond.overseas_freight_usd, step=10.0,
         min_value=0.0, key=f"{kp}_freight",
@@ -142,25 +158,41 @@ def render_sidebar() -> ImportCondition:
     st.sidebar.divider()
 
     # --- 物流 ---
-    st.sidebar.subheader("物流")
-    cols5 = st.sidebar.columns(3)
-    io_fee = cols5[0].number_input(
-        "入出庫 (円)", value=base_cond.io_fee, step=10.0,
-        min_value=0.0, key=f"{kp}_io_fee",
+    st.sidebar.subheader("🚚 物流")
+    st.sidebar.caption("倉庫料金はケース単位でコンテナ非依存。単品/ギフトで別単価。")
+    st.sidebar.markdown("**単品用**")
+    cols5s = st.sidebar.columns(3)
+    io_fee_s = cols5s[0].number_input(
+        "入出庫 (円)", value=base_cond.logistics_single.io_fee, step=10.0,
+        min_value=0.0, key=f"{kp}_io_fee_s",
     )
-    storage_fee = cols5[1].number_input(
-        "保管料 (円)", value=base_cond.storage_fee, step=10.0,
-        min_value=0.0, key=f"{kp}_storage_fee",
+    storage_fee_s = cols5s[1].number_input(
+        "保管料 (円)", value=base_cond.logistics_single.storage_fee, step=10.0,
+        min_value=0.0, key=f"{kp}_storage_fee_s",
     )
-    storage_months = cols5[2].number_input(
-        "ヶ月", value=base_cond.storage_months, step=1.0,
-        min_value=0.0, key=f"{kp}_storage_months",
+    storage_months_s = cols5s[2].number_input(
+        "ヶ月", value=base_cond.logistics_single.storage_months, step=1.0,
+        min_value=0.0, key=f"{kp}_storage_months_s",
+    )
+    st.sidebar.markdown("**ギフト用**")
+    cols5g = st.sidebar.columns(3)
+    io_fee_g = cols5g[0].number_input(
+        "入出庫 (円)", value=base_cond.logistics_gift.io_fee, step=10.0,
+        min_value=0.0, key=f"{kp}_io_fee_g",
+    )
+    storage_fee_g = cols5g[1].number_input(
+        "保管料 (円)", value=base_cond.logistics_gift.storage_fee, step=10.0,
+        min_value=0.0, key=f"{kp}_storage_fee_g",
+    )
+    storage_months_g = cols5g[2].number_input(
+        "ヶ月", value=base_cond.logistics_gift.storage_months, step=1.0,
+        min_value=0.0, key=f"{kp}_storage_months_g",
     )
 
     st.sidebar.divider()
 
-    # --- 輸入経費（単品・ギフト別） ---
-    st.sidebar.subheader("輸入経費")
+    # --- 輸入経費（上級者設定・デフォルト折りたたみ） ---
+    st.sidebar.subheader("💰 輸入経費（上級者設定）")
     with st.sidebar:
         exp_single = _edit_import_expenses(
             "単品用 輸入経費", base_cond.import_expenses_single, f"{kp}_exp_s",
@@ -169,7 +201,7 @@ def render_sidebar() -> ImportCondition:
             "ギフト用 輸入経費", base_cond.import_expenses_gift, f"{kp}_exp_g",
         )
 
-    return ImportCondition(
+    condition = ImportCondition(
         name=selected,
         internal_rate=internal_rate,
         current_rate=current_rate,
@@ -186,7 +218,116 @@ def render_sidebar() -> ImportCondition:
         tariff_rate=tariff_rate,
         import_expenses_single=exp_single,
         import_expenses_gift=exp_gift,
-        io_fee=io_fee,
-        storage_fee=storage_fee,
-        storage_months=storage_months,
+        logistics_single=LogisticsParams(
+            io_fee=io_fee_s, storage_fee=storage_fee_s, storage_months=storage_months_s
+        ),
+        logistics_gift=LogisticsParams(
+            io_fee=io_fee_g, storage_fee=storage_fee_g, storage_months=storage_months_g
+        ),
     )
+
+    # --- シナリオ保存（repo が渡された場合のみ表示） ---
+    if repo is not None:
+        st.sidebar.divider()
+        st.sidebar.subheader("💾 シナリオ保存")
+        scenario_name = st.sidebar.text_input(
+            "名前",
+            placeholder="例: USD150_20FT_標準",
+            key="sidebar_scenario_name",
+        )
+        if st.sidebar.button(
+            "現在の条件を保存", type="primary", use_container_width=True
+        ):
+            if not scenario_name.strip():
+                st.sidebar.error("名前を入力してください")
+            else:
+                try:
+                    sid = repo.save_scenario(scenario_name.strip(), condition)
+                    st.sidebar.success(f"保存しました (id={sid})")
+                except ScenarioNameConflictError:
+                    st.sidebar.error("この名前は既に使われています")
+
+    return condition
+
+
+def _expenses_to_session_state_keys(exp: ImportExpenses, prefix: str) -> dict[str, float]:
+    """ImportExpenses フィールドを session_state キー→値の辞書に変換する.
+
+    Streamlit に依存しない純粋関数のため、単体テストが容易。
+
+    Args:
+        exp: 輸入経費インスタンス。
+        prefix: widget key プレフィックス（例: "20FT_大阪_今治_exp_s"）。
+
+    Returns:
+        {widget_key: value} の辞書。
+    """
+    return {
+        f"{prefix}_cic_usd": exp.cic_usd,
+        f"{prefix}_cy": exp.cy_charge,
+        f"{prefix}_thc": exp.thc,
+        f"{prefix}_emc": exp.emc,
+        f"{prefix}_cic2": exp.cic2,
+        f"{prefix}_do": exp.do_fee,
+        f"{prefix}_doc": exp.doc_fee,
+        f"{prefix}_customs": exp.customs_fee,
+        f"{prefix}_handling": exp.handling_fee,
+        f"{prefix}_drayage": exp.drayage,
+        f"{prefix}_devanning": exp.devanning,
+    }
+
+
+def apply_condition_to_session_state(cond: ImportCondition) -> None:
+    """サイドバーの widget key に cond の値を書き込み、次回描画で反映させる.
+
+    シナリオ読み込み時にこの関数を呼ぶことで、サイドバー全 widget の値が
+    cond の内容に更新される。
+
+    Args:
+        cond: 書き込む輸入条件。
+
+    Raises:
+        ValueError: cond.name が既知のコンテナ条件名でない場合。
+    """
+    if cond.name not in _CONDITIONS:
+        raise ValueError(f"Unknown condition name: {cond.name!r}")
+
+    kp = cond.name.replace(" ", "_").replace("/", "_")
+
+    # コンテナ選択 radio
+    st.session_state["sidebar_container_radio"] = cond.name
+
+    # 為替
+    st.session_state[f"{kp}_internal_rate"] = cond.internal_rate
+    st.session_state[f"{kp}_current_rate"] = cond.current_rate
+
+    # マージン・ロス率・資材
+    st.session_state[f"{kp}_margin_pct"] = cond.margin_pct
+    st.session_state[f"{kp}_loss_rate_pct"] = cond.loss_rate_pct
+    st.session_state[f"{kp}_material_lot"] = cond.material_lot
+    st.session_state[f"{kp}_material_loss_pct"] = cond.material_loss_pct
+
+    # 輸入パラメータ
+    st.session_state[f"{kp}_freight"] = cond.overseas_freight_usd
+    st.session_state[f"{kp}_insurance"] = cond.insurance_rate
+    st.session_state[f"{kp}_tariff"] = cond.tariff_rate
+
+    # 物流（単品/ギフト別）
+    st.session_state[f"{kp}_io_fee_s"] = cond.logistics_single.io_fee
+    st.session_state[f"{kp}_storage_fee_s"] = cond.logistics_single.storage_fee
+    st.session_state[f"{kp}_storage_months_s"] = cond.logistics_single.storage_months
+    st.session_state[f"{kp}_io_fee_g"] = cond.logistics_gift.io_fee
+    st.session_state[f"{kp}_storage_fee_g"] = cond.logistics_gift.storage_fee
+    st.session_state[f"{kp}_storage_months_g"] = cond.logistics_gift.storage_months
+
+    # 輸入経費（単品）
+    for key, val in _expenses_to_session_state_keys(
+        cond.import_expenses_single, f"{kp}_exp_s"
+    ).items():
+        st.session_state[key] = val
+
+    # 輸入経費（ギフト）
+    for key, val in _expenses_to_session_state_keys(
+        cond.import_expenses_gift, f"{kp}_exp_g"
+    ).items():
+        st.session_state[key] = val

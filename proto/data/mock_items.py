@@ -26,14 +26,11 @@ ITEM_01 = SingleItem(
     name_label_2=0.0,
     seal=0.0,
     other_material=0.0,
-    # 物流（CI-CN列）
+    # 物流（CI/CJ/CK/CO列）
     logistics_pcs_per_case=100,
     logistics_freight=111.0,
     logistics_packing=12.0,
     logistics_other=3.0,
-    logistics_cl=70.0,
-    logistics_cm=120.0,
-    logistics_cn=1.0,
 )
 
 # ② OSD-FUWA BT (行8)

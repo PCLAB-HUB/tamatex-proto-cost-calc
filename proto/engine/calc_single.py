@@ -143,9 +143,9 @@ def calc_single_item(item: SingleItem, cond: ImportCondition) -> SingleItemResul
         freight_per_case=item.logistics_freight,
         packing_cost=item.logistics_packing,
         other_logistics=item.logistics_other,
-        cl=item.logistics_cl,
-        cm=item.logistics_cm,
-        cn=item.logistics_cn,
+        cl=cond.logistics_single.io_fee,
+        cm=cond.logistics_single.storage_fee,
+        cn=cond.logistics_single.storage_months,
         pcs_per_case=item.logistics_pcs_per_case,
     )
 

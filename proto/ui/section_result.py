@@ -7,6 +7,13 @@ import streamlit as st
 
 from proto.engine.calc_summary import calc_summary
 from proto.engine.models import GiftSet, GiftSetResult, SummaryResult
+from proto.ui.components.aggrid_table import (
+    create_aggrid,
+    currency_column,
+    number_column,
+    percent_column,
+    text_column,
+)
 
 
 def _build_comparison_df(
@@ -29,15 +36,6 @@ def _build_comparison_df(
     return pd.DataFrame(rows)
 
 
-def _style_profit_rate(val: float) -> str:
-    """粗利率に応じた背景色."""
-    if val >= 40:
-        return "background-color: #d4edda"  # green
-    if val >= 30:
-        return "background-color: #fff3cd"  # yellow
-    return "background-color: #f8d7da"  # red
-
-
 def render_results(
     gifts: list[GiftSet], results: list[GiftSetResult]
 ) -> SummaryResult:
@@ -51,25 +49,29 @@ def render_results(
     cols[0].metric("総数量", f"{summary.total_quantity:,} セット")
     cols[1].metric("総売上", f"{summary.total_sales:,.0f} 円")
     cols[2].metric("総粗利", f"{summary.total_profit:,.0f} 円")
-    cols[3].metric("平均粗利率", f"{summary.avg_profit_rate:.1%}")
+    cols[3].metric(
+        "平均粗利率",
+        f"{summary.avg_profit_rate:.1%}"
+        if summary.avg_profit_rate is not None
+        else "計算不能",
+    )
 
     st.divider()
 
     # --- 比較テーブル ---
     df = _build_comparison_df(gifts, results)
-    styled = df.style.map(
-        _style_profit_rate, subset=["粗利率(%)"]
-    ).format({
-        "販売単価": "{:,.0f}",
-        "見積単価": "{:,.0f}",
-        "製造原価": "{:,.2f}",
-        "粗利単価": "{:,.2f}",
-        "粗利率(%)": "{:.1f}%",
-        "数量": "{:,}",
-        "売上金額": "{:,.0f}",
-        "粗利金額": "{:,.0f}",
-    })
-    st.dataframe(styled, use_container_width=True, hide_index=True)
+    comparison_columns = [
+        text_column("セット名", "セット名", width=160),
+        currency_column("販売単価", "販売単価"),
+        currency_column("見積単価", "見積単価"),
+        currency_column("製造原価", "製造原価"),
+        currency_column("粗利単価", "粗利単価"),
+        percent_column("粗利率(%)", "粗利率(%)", decimals=1),
+        number_column("数量", "数量", decimals=0, width=80),
+        currency_column("売上金額", "売上金額"),
+        currency_column("粗利金額", "粗利金額"),
+    ]
+    create_aggrid(df, comparison_columns, selection="none", height=400)
 
     # --- 粗利率バーチャート ---
     st.subheader("粗利率比較")

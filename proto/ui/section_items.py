@@ -8,6 +8,12 @@ import streamlit as st
 from proto.engine.models import ImportCondition, SingleItem, SingleItemResult
 from proto.engine.calc_single import calc_single_item
 from proto.data.mock_items import ALL_ITEMS
+from proto.ui.components.aggrid_table import (
+    create_aggrid,
+    currency_column,
+    number_column,
+    text_column,
+)
 
 
 def _build_input_df(items: dict[str, SingleItem]) -> pd.DataFrame:
@@ -39,15 +45,15 @@ def _build_result_df(
             "品番": item_no,
             "品名": item.name,
             "種別": item.item_type,
-            "FOB(円)": f"{r.fob_jpy:,.2f}",
-            "製造原価": f"{r.manufacturing_cost:,.2f}",
-            "積載数": f"{r.loaded_pcs:,.0f}" if r.loaded_pcs > 0 else "-",
-            "C&F": f"{r.cnf:,.2f}" if r.cnf > 0 else "-",
-            "CIF": f"{r.cif:,.2f}" if r.cif > 0 else "-",
-            "関税": f"{r.tariff:,.2f}" if r.tariff > 0 else "-",
-            "輸入経費/個": f"{r.import_cost_unit:,.2f}" if r.import_cost_unit > 0 else "-",
-            "物流/個": f"{r.logistics_cost:,.2f}" if r.logistics_cost > 0 else "-",
-            "円建原価": f"{r.jpy_cost:,.2f}",
+            "FOB(円)": r.fob_jpy,
+            "製造原価": r.manufacturing_cost,
+            "積載数": r.loaded_pcs if r.loaded_pcs > 0 else None,
+            "C&F": r.cnf if r.cnf > 0 else None,
+            "CIF": r.cif if r.cif > 0 else None,
+            "関税": r.tariff if r.tariff > 0 else None,
+            "輸入経費/個": r.import_cost_unit if r.import_cost_unit > 0 else None,
+            "物流/個": r.logistics_cost if r.logistics_cost > 0 else None,
+            "円建原価": r.jpy_cost,
         })
     return pd.DataFrame(rows)
 
@@ -62,10 +68,21 @@ def render_items(
 
     # --- 入力データ表示 ---
     with st.expander("入力データ", expanded=False):
-        st.dataframe(
+        input_columns = [
+            text_column("品番", "品番", width=100),
+            text_column("品名", "品名", width=160),
+            text_column("種別", "種別", width=80),
+            text_column("サイズ", "サイズ", width=100),
+            text_column("目方(g)", "目方(g)", width=80),
+            text_column("織区分", "織区分", width=80),
+            text_column("ロット", "ロット", width=90),
+            currency_column("FOB($)", "FOB($)", width=100),
+        ]
+        create_aggrid(
             _build_input_df(items),
-            use_container_width=True,
-            hide_index=True,
+            input_columns,
+            selection="none",
+            height=280,
         )
 
     # --- 計算実行 ---
@@ -75,10 +92,25 @@ def render_items(
 
     # --- 計算結果テーブル ---
     st.subheader("計算結果")
-    st.dataframe(
+    result_columns = [
+        text_column("品番", "品番", width=100),
+        text_column("品名", "品名", width=160),
+        text_column("種別", "種別", width=80),
+        currency_column("FOB(円)", "FOB(円)"),
+        currency_column("製造原価", "製造原価"),
+        number_column("積載数", "積載数", decimals=0, width=90),
+        currency_column("C&F", "C&F"),
+        currency_column("CIF", "CIF"),
+        currency_column("関税", "関税"),
+        currency_column("輸入経費/個", "輸入経費/個"),
+        currency_column("物流/個", "物流/個"),
+        currency_column("円建原価", "円建原価"),
+    ]
+    create_aggrid(
         _build_result_df(items, results),
-        use_container_width=True,
-        hide_index=True,
+        result_columns,
+        selection="none",
+        height=320,
     )
 
     # --- 個別詳細（折りたたみ） ---

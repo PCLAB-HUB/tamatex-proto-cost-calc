@@ -4,7 +4,7 @@ Excelの「ひな形」シートのパラメータ行から抽出。
 単品用・ギフト用の輸入経費を ImportExpenses で個別に保持する。
 """
 
-from proto.engine.models import ImportCondition, ImportExpenses
+from proto.engine.models import ImportCondition, ImportExpenses, LogisticsParams
 
 # ---------------------------------------------------------------------------
 # 20FT / 大阪揚げ / 今治倉庫
@@ -60,10 +60,9 @@ COND_20FT = ImportCondition(
     # 輸入経費（単品・ギフト別）
     import_expenses_single=_EXPENSES_20FT_SINGLE,
     import_expenses_gift=_EXPENSES_20FT_GIFT,
-    # 物流
-    io_fee=70.0,
-    storage_fee=120.0,
-    storage_months=0.0,
+    # 物流（単品/ギフト別・コンテナ非依存。Excel CL/CM/CN列、月数=1）
+    logistics_single=LogisticsParams(io_fee=70.0, storage_fee=120.0, storage_months=1.0),
+    logistics_gift=LogisticsParams(io_fee=140.0, storage_fee=200.0, storage_months=1.0),
 )
 
 # ---------------------------------------------------------------------------
@@ -120,8 +119,7 @@ COND_40FT = ImportCondition(
     # 輸入経費（単品・ギフト別）
     import_expenses_single=_EXPENSES_40FT_SINGLE,
     import_expenses_gift=_EXPENSES_40FT_GIFT,
-    # 物流
-    io_fee=140.0,
-    storage_fee=200.0,
-    storage_months=0.0,
+    # 物流（単品/ギフト別・コンテナ非依存。倉庫料金は20FTと同値）
+    logistics_single=LogisticsParams(io_fee=70.0, storage_fee=120.0, storage_months=1.0),
+    logistics_gift=LogisticsParams(io_fee=140.0, storage_fee=200.0, storage_months=1.0),
 )
