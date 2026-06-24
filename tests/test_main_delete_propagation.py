@@ -315,3 +315,38 @@ def test_sync_cycle_cancels_pending_when_file_reappears(cfg):
     mock_trash.assert_not_called()
     state_db.remove_state.assert_not_called()
     assert pending == set()
+
+
+def test_sync_cycle_resets_pending_on_mass_guard(cfg):
+    """一括ガード発動サイクルでは pending をリセットし、非連続不在を誤確定しない。"""
+    svc = MagicMock()
+    state_db = MagicMock()
+    state_db.get_state.side_effect = lambda p: _state("s", "p")
+    pending: set[str] = {"/nas/p.xlsx"}  # 前サイクルで不在だった（が今は復帰し得る）
+    deleted = [f"/nas/del{i}.xlsx" for i in range(25)]  # 今サイクルは大量不在
+    fake = ChangeResult([], [], deleted, stored_total=60)
+
+    with patch("tamatex.main.scan_files",
+               return_value=[FileInfo("/nas/keep.xlsx", 1.0, "h")]), \
+         patch("tamatex.main.detect_changes", return_value=fake), \
+         patch("tamatex.main.trash_file") as mock_trash:
+        sync_cycle(cfg, state_db, svc, "sheets-root", "pdf-root",
+                   pending_deletions=pending)
+
+    mock_trash.assert_not_called()
+    assert pending == set()
+
+
+def test_sync_cycle_resets_pending_on_nas_disconnect(cfg):
+    """全切断（scan空）サイクルでも pending をリセットする。"""
+    svc = MagicMock()
+    state_db = MagicMock()
+    pending: set[str] = {"/nas/p.xlsx"}
+
+    with patch("tamatex.main.scan_files", return_value=[]), \
+         patch("tamatex.main.trash_file") as mock_trash:
+        sync_cycle(cfg, state_db, svc, "sheets-root", "pdf-root",
+                   pending_deletions=pending)
+
+    mock_trash.assert_not_called()
+    assert pending == set()

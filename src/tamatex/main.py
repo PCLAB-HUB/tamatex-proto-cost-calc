@@ -203,12 +203,16 @@ def sync_cycle(
         )
     except OSError as e:
         logger.error("NAS接続エラー（次回サイクルで再試行）: %s", e)
+        # 信頼できないサイクル: 2サイクル確認の連続性を切る（非連続不在の誤確定防止）。
+        _pending.clear()
         return stats
 
     stats["scanned"] = len(current_files)
 
     if not current_files:
         logger.info("対象ファイルなし")
+        # 全切断/全不可視と区別できないため、ここでも保留をリセットする。
+        _pending.clear()
         return stats
 
     # 2. 変更を検知
@@ -315,6 +319,9 @@ def sync_cycle(
             "（Drive上のファイルは保持。意図した一括削除なら運用者の確認が必要）。",
             len(deleted), changes.stored_total,
         )
+        # 信頼できないサイクル: pending をリセットし、復帰済みファイルが保留に
+        # 残って非連続2回で誤確定されるのを防ぐ。
+        _pending.clear()
     else:
         # deleted が空のサイクルでも到達する。前サイクルで保留したが今サイクル
         # 復帰したファイルを保留から確実に外すため、ここで pending を再評価する。
