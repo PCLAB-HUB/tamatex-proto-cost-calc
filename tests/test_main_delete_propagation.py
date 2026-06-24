@@ -8,7 +8,12 @@ import pytest
 from tamatex.config import (
     AppConfig, NasConfig, GoogleConfig, SyncConfig, LogConfig,
 )
-from tamatex.main import sync_cycle, _is_mass_deletion, _classify_deletions
+from tamatex.main import (
+    sync_cycle,
+    _run_sync_cycle,
+    _is_mass_deletion,
+    _classify_deletions,
+)
 from tamatex.watcher import ChangeResult, FileInfo
 
 
@@ -76,7 +81,7 @@ def test_sync_cycle_trashes_sheet_and_pdf_on_deletion(cfg):
     fake = ChangeResult([], [], ["/nas/gone.xlsx"], stored_total=10)
 
     with patch("tamatex.main.scan_files",
-               return_value=[FileInfo("/nas/keep.xlsx", 1.0, "h")]), \
+               return_value=([FileInfo("/nas/keep.xlsx", 1.0, "h")], True)), \
          patch("tamatex.main.detect_changes", return_value=fake), \
          patch("tamatex.main.trash_file") as mock_trash:
         sync_cycle(cfg, state_db, svc, "sheets-root", "pdf-root",
@@ -98,7 +103,7 @@ def test_sync_cycle_trashes_only_sheet_when_no_pdf(cfg):
     fake = ChangeResult([], [], ["/nas/gone.xlsx"], stored_total=10)
 
     with patch("tamatex.main.scan_files",
-               return_value=[FileInfo("/nas/keep.xlsx", 1.0, "h")]), \
+               return_value=([FileInfo("/nas/keep.xlsx", 1.0, "h")], True)), \
          patch("tamatex.main.detect_changes", return_value=fake), \
          patch("tamatex.main.trash_file") as mock_trash:
         sync_cycle(cfg, state_db, svc, "sheets-root", "pdf-root",
@@ -116,7 +121,7 @@ def test_sync_cycle_skips_deletion_when_mass_guard_trips(cfg):
     fake = ChangeResult([], [], deleted, stored_total=60)
 
     with patch("tamatex.main.scan_files",
-               return_value=[FileInfo("/nas/keep.xlsx", 1.0, "h")]), \
+               return_value=([FileInfo("/nas/keep.xlsx", 1.0, "h")], True)), \
          patch("tamatex.main.detect_changes", return_value=fake), \
          patch("tamatex.main.trash_file") as mock_trash:
         sync_cycle(cfg, state_db, svc, "sheets-root", "pdf-root")
@@ -134,7 +139,7 @@ def test_sync_cycle_propagates_deletion_at_guard_boundary(cfg):
     fake = ChangeResult([], [], deleted, stored_total=60)
 
     with patch("tamatex.main.scan_files",
-               return_value=[FileInfo("/nas/keep.xlsx", 1.0, "h")]), \
+               return_value=([FileInfo("/nas/keep.xlsx", 1.0, "h")], True)), \
          patch("tamatex.main.detect_changes", return_value=fake), \
          patch("tamatex.main.trash_file") as mock_trash:
         sync_cycle(cfg, state_db, svc, "sheets-root", "pdf-root",
@@ -149,7 +154,7 @@ def test_sync_cycle_skips_everything_when_nas_disconnected(cfg):
     svc = MagicMock()
     state_db = MagicMock()
 
-    with patch("tamatex.main.scan_files", return_value=[]), \
+    with patch("tamatex.main.scan_files", return_value=([], True)), \
          patch("tamatex.main.trash_file") as mock_trash:
         sync_cycle(cfg, state_db, svc, "sheets-root", "pdf-root")
 
@@ -168,7 +173,7 @@ def test_sync_cycle_skips_trash_when_file_still_exists(cfg, tmp_path):
     fake = ChangeResult([], [], [str(real)], stored_total=10)
 
     with patch("tamatex.main.scan_files",
-               return_value=[FileInfo("/nas/keep.xlsx", 1.0, "h")]), \
+               return_value=([FileInfo("/nas/keep.xlsx", 1.0, "h")], True)), \
          patch("tamatex.main.detect_changes", return_value=fake), \
          patch("tamatex.main.trash_file") as mock_trash:
         sync_cycle(cfg, state_db, svc, "sheets-root", "pdf-root")
@@ -187,7 +192,7 @@ def test_sync_cycle_skips_deletion_when_shutdown_requested(cfg):
     ev.set()
 
     with patch("tamatex.main.scan_files",
-               return_value=[FileInfo("/nas/keep.xlsx", 1.0, "h")]), \
+               return_value=([FileInfo("/nas/keep.xlsx", 1.0, "h")], True)), \
          patch("tamatex.main.detect_changes", return_value=fake), \
          patch("tamatex.main.trash_file") as mock_trash:
         sync_cycle(cfg, state_db, svc, "sheets-root", "pdf-root", shutdown_event=ev)
@@ -209,7 +214,7 @@ def test_sync_cycle_aborts_mid_deletion_on_shutdown(cfg):
         ev.set()
 
     with patch("tamatex.main.scan_files",
-               return_value=[FileInfo("/nas/keep.xlsx", 1.0, "h")]), \
+               return_value=([FileInfo("/nas/keep.xlsx", 1.0, "h")], True)), \
          patch("tamatex.main.detect_changes", return_value=fake), \
          patch("tamatex.main.trash_file", side_effect=trash_side_effect) as mock_trash:
         sync_cycle(cfg, state_db, svc, "sheets-root", "pdf-root", shutdown_event=ev,
@@ -258,7 +263,7 @@ def test_sync_cycle_defers_deletion_on_first_absence(cfg):
     pending: set[str] = set()
 
     with patch("tamatex.main.scan_files",
-               return_value=[FileInfo("/nas/keep.xlsx", 1.0, "h")]), \
+               return_value=([FileInfo("/nas/keep.xlsx", 1.0, "h")], True)), \
          patch("tamatex.main.detect_changes", return_value=fake), \
          patch("tamatex.main.trash_file") as mock_trash:
         sync_cycle(cfg, state_db, svc, "sheets-root", "pdf-root",
@@ -278,7 +283,7 @@ def test_sync_cycle_trashes_only_after_two_consecutive_absences(cfg):
     pending: set[str] = set()
 
     with patch("tamatex.main.scan_files",
-               return_value=[FileInfo("/nas/keep.xlsx", 1.0, "h")]), \
+               return_value=([FileInfo("/nas/keep.xlsx", 1.0, "h")], True)), \
          patch("tamatex.main.detect_changes", return_value=fake), \
          patch("tamatex.main.trash_file") as mock_trash:
         # 1サイクル目: 保留のみ（trashなし）
@@ -306,7 +311,7 @@ def test_sync_cycle_cancels_pending_when_file_reappears(cfg):
     pending: set[str] = {"/nas/gone.xlsx"}
 
     with patch("tamatex.main.scan_files",
-               return_value=[FileInfo("/nas/gone.xlsx", 1.0, "h")]), \
+               return_value=([FileInfo("/nas/gone.xlsx", 1.0, "h")], True)), \
          patch("tamatex.main.detect_changes", return_value=fake), \
          patch("tamatex.main.trash_file") as mock_trash:
         sync_cycle(cfg, state_db, svc, "sheets-root", "pdf-root",
@@ -327,7 +332,7 @@ def test_sync_cycle_resets_pending_on_mass_guard(cfg):
     fake = ChangeResult([], [], deleted, stored_total=60)
 
     with patch("tamatex.main.scan_files",
-               return_value=[FileInfo("/nas/keep.xlsx", 1.0, "h")]), \
+               return_value=([FileInfo("/nas/keep.xlsx", 1.0, "h")], True)), \
          patch("tamatex.main.detect_changes", return_value=fake), \
          patch("tamatex.main.trash_file") as mock_trash:
         sync_cycle(cfg, state_db, svc, "sheets-root", "pdf-root",
@@ -343,10 +348,44 @@ def test_sync_cycle_resets_pending_on_nas_disconnect(cfg):
     state_db = MagicMock()
     pending: set[str] = {"/nas/p.xlsx"}
 
-    with patch("tamatex.main.scan_files", return_value=[]), \
+    with patch("tamatex.main.scan_files", return_value=([], True)), \
          patch("tamatex.main.trash_file") as mock_trash:
         sync_cycle(cfg, state_db, svc, "sheets-root", "pdf-root",
                    pending_deletions=pending)
 
     mock_trash.assert_not_called()
+    assert pending == set()
+
+
+def test_sync_cycle_skips_deletion_on_incomplete_scan(cfg):
+    """走査不完全（部分I/O障害）なら削除伝播せず pending をリセットする。"""
+    svc = MagicMock()
+    state_db = MagicMock()
+    state_db.get_state.side_effect = lambda p: _state("s", "p")
+    pending: set[str] = {"/nas/gone.xlsx"}
+    fake = ChangeResult([], [], ["/nas/gone.xlsx"], stored_total=10)
+
+    with patch("tamatex.main.scan_files",
+               return_value=([FileInfo("/nas/keep.xlsx", 1.0, "h")], False)), \
+         patch("tamatex.main.detect_changes", return_value=fake), \
+         patch("tamatex.main.trash_file") as mock_trash:
+        sync_cycle(cfg, state_db, svc, "sheets-root", "pdf-root",
+                   pending_deletions=pending)
+
+    mock_trash.assert_not_called()
+    state_db.remove_state.assert_not_called()
+    assert pending == set()
+
+
+def test_run_sync_cycle_clears_pending_on_exception(cfg):
+    """sync_cycle が例外で落ちたサイクルでは pending をリセットする。"""
+    state_db = MagicMock()
+    pending: set[str] = {"/nas/p.xlsx"}
+
+    with patch("tamatex.main.scan_files",
+               return_value=([FileInfo("/nas/keep.xlsx", 1.0, "h")], True)), \
+         patch("tamatex.main.detect_changes", side_effect=RuntimeError("boom")):
+        _run_sync_cycle(cfg, state_db, MagicMock(), "s", "p",
+                        pending_deletions=pending)
+
     assert pending == set()

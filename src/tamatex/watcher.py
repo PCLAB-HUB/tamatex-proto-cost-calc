@@ -47,14 +47,20 @@ def scan_files(
     base_path: str,
     file_patterns: list[str],
     exclude_patterns: list[str],
-) -> list[FileInfo]:
-    """NASフォルダをスキャンして対象ファイル一覧を返す。"""
+) -> tuple[list[FileInfo], bool]:
+    """NASフォルダをスキャンして ``(対象ファイル一覧, 走査完全フラグ)`` を返す。
+
+    走査完全フラグは、列挙・読取で1件でも ``OSError`` を握りつぶした場合 False。
+    呼び出し側はこのフラグが False のサイクルでは削除伝播を保留すべき
+    （部分I/O障害で実在ファイルを誤って削除扱いにしないため）。
+    """
     base = Path(base_path)
     if not base.exists():
         raise OSError(f"NASパスが見つかりません: {base_path}")
 
     base_resolved = base.resolve()
     files: list[FileInfo] = []
+    scan_complete = True
     for pattern in file_patterns:
         for file_path in base.rglob(pattern):
             if not file_path.is_file():
@@ -83,10 +89,15 @@ def scan_files(
                 ))
             except OSError as e:
                 logger.warning("ファイル読み取りエラー（スキップ）: %s - %s", file_path, e)
+                # 部分I/O障害。このサイクルの走査は不完全とみなす。
+                scan_complete = False
                 continue
 
-    logger.info("スキャン完了: %d ファイル検出 (%s)", len(files), base_path)
-    return files
+    logger.info(
+        "スキャン完了: %d ファイル検出 (%s)%s",
+        len(files), base_path, "" if scan_complete else " ※走査不完全",
+    )
+    return files, scan_complete
 
 
 def detect_changes(current_files: list[FileInfo], state_db: StateDB) -> ChangeResult:

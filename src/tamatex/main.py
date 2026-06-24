@@ -196,7 +196,7 @@ def sync_cycle(
 
     # 1. NASフォルダをスキャン
     try:
-        current_files = scan_files(
+        current_files, scan_complete = scan_files(
             config.nas.base_path,
             config.nas.file_patterns,
             config.nas.exclude_patterns,
@@ -309,7 +309,16 @@ def sync_cycle(
 
     # 4. NAS削除のDrive追従（2サイクル確認＋一括消失ガード）
     deleted = changes.deleted_paths
-    if deleted and _event.is_set():
+    if not scan_complete:
+        # 走査が不完全（部分I/O障害）なサイクルは削除確認として信頼できない。
+        # 連続性を切るため pending をリセットし、削除伝播は行わない。
+        if deleted:
+            logger.warning(
+                "走査不完全のため削除伝播を保留し2サイクル確認をリセット（%d件）",
+                len(deleted),
+            )
+        _pending.clear()
+    elif deleted and _event.is_set():
         # 破壊的操作の保護: 停止要求が出ているサイクルでは削除を行わない。
         logger.info("シャットダウン要求のため削除伝播をスキップ（%d件保留）", len(deleted))
     elif deleted and _is_mass_deletion(len(deleted), changes.stored_total):
@@ -577,6 +586,10 @@ def _run_sync_cycle(
         )
     except Exception as e:
         logger.error("同期サイクルで予期しないエラー: %s", e, exc_info=True)
+        # 信頼できないサイクル: 渡した pending をリセットし、次サイクルでの
+        # 非連続不在の誤確定を防ぐ。
+        if pending_deletions is not None:
+            pending_deletions.clear()
 
 
 def main():

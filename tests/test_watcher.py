@@ -138,7 +138,7 @@ def test_scan_files_finds_xlsx_files(nas_dir):
     """scan_files が .xlsx ファイルを検出すること。"""
     (nas_dir / "report.xlsx").write_bytes(b"PK\x03\x04")  # xlsxのマジックバイト風
 
-    result = scan_files(str(nas_dir), ["*.xlsx"], [])
+    result, _ = scan_files(str(nas_dir), ["*.xlsx"], [])
 
     paths = [fi.path for fi in result]
     assert any("report.xlsx" in p for p in paths)
@@ -149,7 +149,7 @@ def test_scan_files_finds_multiple_xlsx_files(nas_dir):
     for name in ("a.xlsx", "b.xlsx", "c.xlsx"):
         (nas_dir / name).write_bytes(b"PK\x03\x04")
 
-    result = scan_files(str(nas_dir), ["*.xlsx"], [])
+    result, _ = scan_files(str(nas_dir), ["*.xlsx"], [])
     assert len(result) == 3
 
 
@@ -158,7 +158,7 @@ def test_scan_files_excludes_tilde_dollar_temp_files(nas_dir):
     (nas_dir / "~$locked.xlsx").write_bytes(b"PK\x03\x04")
     (nas_dir / "real.xlsx").write_bytes(b"PK\x03\x04")
 
-    result = scan_files(str(nas_dir), ["*.xlsx"], ["~$*"])
+    result, _ = scan_files(str(nas_dir), ["*.xlsx"], ["~$*"])
 
     paths = [fi.path for fi in result]
     assert all("~$" not in p for p in paths)
@@ -170,7 +170,7 @@ def test_scan_files_excludes_tmp_extension_files(nas_dir):
     (nas_dir / "data.tmp").write_bytes(b"temp data")
     (nas_dir / "data.xlsx").write_bytes(b"PK\x03\x04")
 
-    result = scan_files(str(nas_dir), ["*.xlsx", "*.tmp"], ["*.tmp"])
+    result, _ = scan_files(str(nas_dir), ["*.xlsx", "*.tmp"], ["*.tmp"])
 
     paths = [fi.path for fi in result]
     assert all("data.tmp" not in p for p in paths)
@@ -186,7 +186,7 @@ def test_scan_files_returns_empty_list_for_no_matching_files(nas_dir):
     """一致するファイルがない場合は空リストを返すこと。"""
     (nas_dir / "readme.txt").write_text("not excel", encoding="utf-8")
 
-    result = scan_files(str(nas_dir), ["*.xlsx"], [])
+    result, _ = scan_files(str(nas_dir), ["*.xlsx"], [])
     assert result == []
 
 
@@ -194,7 +194,7 @@ def test_scan_files_returns_fileinfo_instances(nas_dir):
     """返り値が FileInfo のリストであること。"""
     (nas_dir / "file.xlsx").write_bytes(b"PK\x03\x04")
 
-    result = scan_files(str(nas_dir), ["*.xlsx"], [])
+    result, _ = scan_files(str(nas_dir), ["*.xlsx"], [])
     assert all(isinstance(fi, FileInfo) for fi in result)
 
 
@@ -202,7 +202,7 @@ def test_scan_files_fileinfo_has_valid_mtime(nas_dir):
     """FileInfo.mtime が正の実数であること。"""
     (nas_dir / "file.xlsx").write_bytes(b"PK\x03\x04")
 
-    result = scan_files(str(nas_dir), ["*.xlsx"], [])
+    result, _ = scan_files(str(nas_dir), ["*.xlsx"], [])
     assert len(result) == 1
     assert result[0].mtime > 0
 
@@ -213,7 +213,7 @@ def test_scan_files_searches_subdirectories(nas_dir):
     subdir.mkdir()
     (subdir / "nested.xlsx").write_bytes(b"PK\x03\x04")
 
-    result = scan_files(str(nas_dir), ["*.xlsx"], [])
+    result, _ = scan_files(str(nas_dir), ["*.xlsx"], [])
 
     paths = [fi.path for fi in result]
     assert any("nested.xlsx" in p for p in paths)
@@ -225,7 +225,7 @@ def test_scan_files_excludes_with_multiple_patterns(nas_dir):
     (nas_dir / "backup.tmp").write_bytes(b"tmp")
     (nas_dir / "valid.xlsx").write_bytes(b"PK\x03\x04")
 
-    result = scan_files(str(nas_dir), ["*.xlsx"], ["~$*", "*.tmp"])
+    result, _ = scan_files(str(nas_dir), ["*.xlsx"], ["~$*", "*.tmp"])
 
     paths = [fi.path for fi in result]
     assert len(paths) == 1
@@ -363,3 +363,30 @@ def test_detect_changes_stored_total_zero_for_empty_db(db):
     """空DBなら stored_total は 0。"""
     result = detect_changes([FileInfo("/nas/x.xlsx", 1.0, "h")], db)
     assert result.stored_total == 0
+
+
+# ---------------------------------------------------------------------------
+# scan_files の走査完全フラグ
+# ---------------------------------------------------------------------------
+
+def test_scan_files_reports_complete_when_all_readable(nas_dir):
+    """全ファイル読取成功なら走査完全フラグは True。"""
+    (nas_dir / "a.xlsx").write_text("data")
+    _, complete = scan_files(str(nas_dir), ["*.xlsx"], [])
+    assert complete is True
+
+
+def test_scan_files_reports_incomplete_on_read_error(nas_dir, monkeypatch):
+    """読取で OSError が出たファイルがあれば走査完全フラグは False。"""
+    (nas_dir / "a.xlsx").write_text("data")
+
+    import tamatex.watcher as w
+
+    def boom(path):
+        raise OSError("simulated read error")
+
+    monkeypatch.setattr(w, "_compute_file_hash", boom)
+
+    files, complete = scan_files(str(nas_dir), ["*.xlsx"], [])
+    assert complete is False
+    assert files == []
