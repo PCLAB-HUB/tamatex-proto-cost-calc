@@ -51,6 +51,35 @@ def _is_mass_deletion(deleted_count: int, stored_total: int) -> bool:
     return deleted_count > stored_total * MASS_DELETE_RATIO
 
 
+def _classify_deletions(
+    absent_paths: list[str], prev_pending: set[str]
+) -> tuple[list[str], set[str]]:
+    """2サイクル確認（誤削除防止）の純関数。
+
+    削除候補は「初回不在」では確定せず保留し、2サイクル連続で不在を確認できた
+    ものだけを削除確定とする。NASの一時的な部分アンマウントで実体ごと不可視に
+    なったファイルは次サイクルで復帰して保留から脱落するため、誤って Drive を
+    ゴミ箱送りにする（＝URL断絶・重複生成）ことを防ぐ。
+
+    Parameters
+    ----------
+    absent_paths : list[str]
+        今サイクルで（実体も）不在と確認された削除候補パス。
+    prev_pending : set[str]
+        前サイクルで不在だった（保留中の）パス集合。
+
+    Returns
+    -------
+    tuple[list[str], set[str]]
+        ``(confirmed, new_pending)``。``confirmed`` = 前サイクルも不在だった
+        → 削除確定（trash対象）。``new_pending`` = 今回初めて不在 → 次サイクルで
+        再確認するため保留。
+    """
+    confirmed = [p for p in absent_paths if p in prev_pending]
+    new_pending = {p for p in absent_paths if p not in prev_pending}
+    return confirmed, new_pending
+
+
 _shutdown_event = threading.Event()
 
 
@@ -155,9 +184,13 @@ def sync_cycle(
     sheets_folder_id: str,
     pdf_folder_id: str,
     shutdown_event: threading.Event | None = None,
+    pending_deletions: set[str] | None = None,
 ) -> dict:
     """1回の同期サイクルを実行する。"""
     _event = shutdown_event or _shutdown_event
+    # 2サイクル確認用の保留集合。run() がサイクル跨ぎで保持して渡す。
+    # 単独呼び出し（None）では使い捨ての空集合とし、削除は確定しない。
+    _pending = pending_deletions if pending_deletions is not None else set()
     stats = {"scanned": 0, "synced": 0, "errors": 0, "skipped": 0}
     folder_cache: dict[tuple[str, ...], tuple[str, str]] = {}
 
@@ -270,32 +303,46 @@ def sync_cycle(
             logger.error("同期失敗（スキップ）: %s - %s", file_name, e, exc_info=True)
             stats["errors"] += 1
 
-    # 4. NAS削除のDrive追従（一括消失ガード付き）
+    # 4. NAS削除のDrive追従（2サイクル確認＋一括消失ガード）
     deleted = changes.deleted_paths
     if deleted and _event.is_set():
         # 破壊的操作の保護: 停止要求が出ているサイクルでは削除を行わない。
         logger.info("シャットダウン要求のため削除伝播をスキップ（%d件保留）", len(deleted))
-    elif deleted:
-        if _is_mass_deletion(len(deleted), changes.stored_total):
-            logger.warning(
-                "一括消失ガード発動: 削除候補=%d件 / 登録総数=%d件。"
-                "NAS部分障害または大規模整理の可能性があるため今サイクルの削除を保留します"
-                "（Drive上のファイルは保持。意図した一括削除なら運用者の確認が必要）。",
-                len(deleted), changes.stored_total,
-            )
-        else:
-            for deleted_path in deleted:
+    elif deleted and _is_mass_deletion(len(deleted), changes.stored_total):
+        logger.warning(
+            "一括消失ガード発動: 削除候補=%d件 / 登録総数=%d件。"
+            "NAS部分障害または大規模整理の可能性があるため今サイクルの削除を保留します"
+            "（Drive上のファイルは保持。意図した一括削除なら運用者の確認が必要）。",
+            len(deleted), changes.stored_total,
+        )
+    else:
+        # deleted が空のサイクルでも到達する。前サイクルで保留したが今サイクル
+        # 復帰したファイルを保留から確実に外すため、ここで pending を再評価する。
+        # 誤削除防止1: 走査時に一時スキップ（保存中・一時I/Oエラー）されただけで
+        # 実体がまだNASに在るファイルは削除候補から除外する（URL維持）。
+        absent: list[str] = []
+        for deleted_path in deleted:
+            if _event.is_set():
+                break
+            if Path(deleted_path).exists():
+                logger.warning(
+                    "削除検知だが実体が存在するため除外（走査時の一時スキップと判断）: %s",
+                    deleted_path,
+                )
+                continue
+            absent.append(deleted_path)
+
+        if not _event.is_set():
+            # 誤削除防止2: 2サイクル連続で不在を確認したものだけ削除確定。
+            confirmed, new_pending = _classify_deletions(absent, _pending)
+            for deleted_path in new_pending:
+                logger.info(
+                    "削除候補を保留（次サイクルで不在を再確認）: %s", deleted_path
+                )
+            for deleted_path in confirmed:
                 if _event.is_set():
                     logger.info("シャットダウン要求のため削除伝播を中断")
                     break
-                # 誤削除防止: 走査時に一時スキップ（保存中・一時I/Oエラー）された
-                # だけで実体がまだNASに在るファイルは削除扱いにしない（URL維持）。
-                if Path(deleted_path).exists():
-                    logger.warning(
-                        "削除検知だが実体が存在するため保留（走査時の一時スキップと判断）: %s",
-                        deleted_path,
-                    )
-                    continue
                 try:
                     state = state_db.get_state(deleted_path)
                     if state:
@@ -310,13 +357,24 @@ def sync_cycle(
                                 break
                             trash_file(service, state.pdf_file_id)
                     if _event.is_set():
-                        logger.info("シャットダウン要求のため state 削除を中断: %s", deleted_path)
+                        logger.info(
+                            "シャットダウン要求のため state 削除を中断: %s", deleted_path
+                        )
                         break
                     state_db.remove_state(deleted_path)
-                    logger.info("NAS削除を追従（Driveゴミ箱へ移動）: %s", deleted_path)
+                    logger.info(
+                        "NAS削除を追従（2サイクル確認済み・Driveゴミ箱へ移動）: %s",
+                        deleted_path,
+                    )
                 except Exception as e:
                     logger.error("削除追従エラー（スキップ）: %s - %s", deleted_path, e)
                     stats["errors"] += 1
+
+            # 保留集合を更新（確定分・復帰分は脱落、初回不在のみ残す）。
+            # shutdown 途中で抜けた場合は pending を変えず次回へ持ち越す。
+            if not _event.is_set():
+                _pending.clear()
+                _pending.update(new_pending)
 
     return stats
 
@@ -376,8 +434,14 @@ def run(config_path: str | Path) -> None:
         )
         logger.info("再配置完了: %d ファイル処理", moved)
 
+    # 削除伝播の2サイクル確認用。前サイクルで不在だった削除候補を保持する。
+    pending_deletions: set[str] = set()
+
     # 初回同期を即座に実行（PC起動時の朝同期に相当）
-    _run_sync_cycle(config, state_db, service, sheets_folder_id, pdf_folder_id)
+    _run_sync_cycle(
+        config, state_db, service, sheets_folder_id, pdf_folder_id,
+        pending_deletions,
+    )
 
     # 定期実行ループ
     # 長時間の sleep 後に httplib2 の TCP セッションが死ぬ問題があるため、
@@ -408,7 +472,10 @@ def run(config_path: str | Path) -> None:
             logger.error(
                 "service再生成失敗（前回のserviceで継続）: %s", e, exc_info=True
             )
-        _run_sync_cycle(config, state_db, service, sheets_folder_id, pdf_folder_id)
+        _run_sync_cycle(
+            config, state_db, service, sheets_folder_id, pdf_folder_id,
+            pending_deletions,
+        )
 
     logger.info("=== tamatex 正常終了 ===")
 
@@ -486,6 +553,7 @@ def _run_sync_cycle(
     service,
     sheets_folder_id: str,
     pdf_folder_id: str,
+    pending_deletions: set[str] | None = None,
 ) -> None:
     """同期サイクルを1回実行してログ出力する。"""
     logger.info("--- 同期サイクル開始 ---")
@@ -494,6 +562,7 @@ def _run_sync_cycle(
             config, state_db, service,
             sheets_folder_id, pdf_folder_id,
             _shutdown_event,
+            pending_deletions,
         )
         logger.info(
             "--- 同期サイクル完了: スキャン=%d, 同期=%d, スキップ=%d, エラー=%d ---",
