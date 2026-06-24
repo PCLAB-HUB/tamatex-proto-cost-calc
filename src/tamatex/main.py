@@ -299,10 +299,19 @@ def sync_cycle(
                 try:
                     state = state_db.get_state(deleted_path)
                     if state:
+                        # 各破壊的操作の直前で停止要求を再確認し、
+                        # shutdown後に新たなtrash/state削除を開始しない。
                         if state.spreadsheet_id:
+                            if _event.is_set():
+                                break
                             trash_file(service, state.spreadsheet_id)
                         if state.pdf_file_id:
+                            if _event.is_set():
+                                break
                             trash_file(service, state.pdf_file_id)
+                    if _event.is_set():
+                        logger.info("シャットダウン要求のため state 削除を中断: %s", deleted_path)
+                        break
                     state_db.remove_state(deleted_path)
                     logger.info("NAS削除を追従（Driveゴミ箱へ移動）: %s", deleted_path)
                 except Exception as e:
