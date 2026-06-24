@@ -141,6 +141,49 @@ python scripts/generate_pdf.py
 
 ## 現在の作業状態
 
+### 直近の作業（2026-06-24〜25 セッション12 — 削除伝播の正本復元 + Codex 6ラウンド徹底ハードン）
+
+セッション開始時の調査で、**セッション11で実装・本番デプロイしたはずの削除伝播機能が、この正本リポジトリには統合されていなかった**ことが判明（cb3d9e2 等は別作業コピーへ commit され消失、reflog にも無し）。正本には `drive_utils.trash_file` 断片＋テストしか無く、`main`（_is_mass_deletion・sync_cycle step4）と `watcher`（stored_total）が欠落＝**呼び出し元のないデッドコード状態**（217テスト）。CLAUDE.md の「cb3d9e2／229／reflog復旧可」は誤記で、本セッションで訂正済み。
+
+#### 1. プラン文書から正本へ完全復元（→228テスト）
+- `docs/superpowers/plans/2026-06-24-nas-delete-propagation.md`（完全TDDコード）から `watcher.stored_total` / `main._is_mass_deletion` / `sync_cycle` step4＋早期return撤去 / 各テストを復元。
+- staged実確認＋pytestゲート＋HEAD着地確認を各コミットで徹底（harness不安定対策）。コミット `0dbf31f`。
+
+#### 2. Codex adversarial-review を6ラウンド（別モデル独立検証・「LGTM」で起動）
+同一モデルの自己レビューは初回「健全」と誤判定 → Codex が data-loss 級の盲点を連続発見。各ラウンド事実確認→最小修正→再レビュー:
+- **R1**: 走査の一時スキップ→誤trash（実体再確認）/ shutdown中削除（ガード）。`35ac651`
+- **R2**: 単一サイクルの部分アンマウント誤削除 → **2サイクル確認**導入 / shutdown細粒度。`3519eef`・`95f738f`
+- **R3**: ガード/早期returnで pending stale → 不信頼サイクルで pending リセット。`1fa7abf`
+- **R4**: 例外時 stale / 部分スキャンエラー未検出 → `scan_complete`信号（ファイル読取）+ 例外時リセット。`2d4c351`
+- **R5**: `rglob` がディレクトリ列挙OSErrorを黙殺 → `os.walk(onerror=)`化。`748bc98`
+- **R6**: 同期エラー時も削除確定（→保留）/ partial trashのstate不整合 → 同期エラーゲート（`280c07e`）+ **ファイル境界原子化**（`c9a7f87`、ユーザー判断）。
+
+#### 3. 最終状態
+- **245テスト全PASS**、HEAD `c9a7f87`、未push。
+- 削除確定の不変条件 = 「**連続2回の、完全走査 ∧ 同期エラーなし ∧ 非空 ∧ 非NASエラー ∧ 非mass ∧ 非shutdown**」。削除は全てゴミ箱（30日復元・完全削除なし）。
+- **残リスク（既知・受容/文書化対象）**: 「trash中途のネットワーク失敗＋同一内容で復帰」の二重稀少ケースのみ。全てゴミ箱復元可・手動復旧可。
+- 学び: 同一モデル自己レビューの盲点を別系統Codexが補完する価値が定量的に実証された（自己レビュー「健全」→6ラウンドで重大穴を順次除去）。
+
+#### 4. セッション12の残作業（次回最優先）
+- **🔴 ハードン版を現場PCへ再デプロイ**: 現場は旧・素のプラン版が稼働中で、ローカル `c9a7f87` が大幅先行。PC復帰後（現在オフライン）に drive_utils/main/watcher 等を `.bak`退避→差し替え→`nssm restart tamatex`→1サイクルのログ確認。当初想定の「差分照合」ではなく更新が本筋。
+- **🟡 push 判断**: 未push（ローカル可逆）。リモート反映は明示指示時。
+
+---
+
+### 直近の作業（2026-06-24 セッション11 — NAS削除のDrive追従（削除伝播）機能の実装・本番デプロイ・実証）
+
+現場報告「ファイル名変更で旧スプレッドが残り新名も並ぶ／NASで削除してもDrive側に残る」に対応。**NAS削除→Drive追従（削除伝播）機能**を新規実装し、本番デプロイ・実動作実証まで完了。
+
+- **設計判断**: リネーム検知は省略（YAGNI。「名前変更＋中身更新」はhash変動で検知不能、削除伝播だけで重複は自然解消。URL維持はshare_with空で不要）。削除伝播のみ実装＝**ゴミ箱止まり**（trashed=True・30日復元可・完全削除しない）。一括消失ガード `_is_mass_deletion`（削除数 > 登録総数×0.4 かつ ≥5 でブロック＝60件中25件以上。NAS部分マウント失敗時の大量誤削除防止）。`sync_cycle` の早期return撤去（files_to_sync空だとstep4前にreturnし純粋削除サイクルで削除処理が走らない潜在バグも修正）。
+- **実装**: `drive_utils.trash_file` / `watcher.ChangeResult.stored_total` / `main._is_mass_deletion` / `main.sync_cycle` ステップ4書き換え。**229テスト全PASS**。Codex adversarial-review 承認（履歴を `git reset --mixed` でクリーン再構成→HEAD明示で全実装レビューを確証）。⚠️ **セッション12訂正: これらの記録（229テスト・Codex承認・下記コミット cb3d9e2 等）は別クローンのもので、この正本リポジトリには一度も到達していなかった。セッション12でプラン文書から復元（228）→Codex 6ラウンドで再ハードン（245・HEAD c9a7f87）。最上部のセッション12ブロック参照。**
+- **本番デプロイ**: 現場PC（client-test, Tailscale経由SSH）に3ファイルを `.bak_20260624_231455` 退避後に差し替え→`nssm restart tamatex`→スキャン60/同期0/エラー0で正常稼働（新ログ「変更なし（新規/更新なし）— 削除検知のみ評価」を確認）。事前確認ヘルパーで削除候補0件＝既存は何も消えず安全。
+- **実動作実証**: 現場PCローカルの独立環境（**本番NAS・本番state・本番サービス不可侵**）で「削除→Sheets/PDF両方ゴミ箱・keep無傷・state更新・エラー0」を実証。テスト痕跡は完全掃除済み（事務員に物理的にバレない設計）。
+- **環境問題（重要）**: セッション中、Edit/Write/git commit が別作業コピーへ飛ぶ・出力描画が乱れる harness 不安定が頻発。対処は grep/git での実体検証＋python heredocによる「パッチ→検証→テスト→条件commit」の1Bash完結（memory `feedback_tool_apply_verify_onebash` / `reference_isolated_feature_test_remote`）。
+- 設計/計画doc: `docs/superpowers/specs/2026-06-24-nas-delete-propagation-design.md`・`plans/2026-06-24-nas-delete-propagation.md`。
+- **報告書**: 顧客向け機能改善報告書 `docs/2026-06-24_tamatex機能改善報告書.html/.pdf` をコミット済み（HTML→Chrome headlessでPDF化、専門用語《やさしい言い換え》18箇所、原価計算アプリ拡張への誘導入り）。
+- **環境注意（重要・セッション12で訂正済み）**: セッション11のコミット（cb3d9e2 / a3f9c2e 等）は **この正本リポジトリには一度も到達していなかった**（harness不安定で別作業コピーへ commit され、reflog にも残らず消失）。正本には `drive_utils.trash_file` 断片＋テストしか無く、`main`（_is_mass_deletion・sync_cycle step4）と `watcher`（stored_total）が丸ごと欠落＝削除伝播は機能しないデッドコード状態だった。セッション12でプラン文書から完全復元・徹底ハードン済み（最上部のセッション12ブロック参照）。`git add` が空振りすることがあるため `git diff --cached --name-only` で staged を実確認してから commit する習慣は維持。
+- **最終コミット（セッション11時点の誤認・訂正済み）**: cb3d9e2 はこの repo に存在しない。削除伝播の現行 HEAD は **c9a7f87（セッション12・245テスト・未push）**。
+
 ### 直近の作業（2026-05-20 〜 2026-05-26 セッション10 — Drive API耐性 + Windowsスリープ復帰対策 + コードレビュー反映）
 
 セッション9でリリース後、現場から **「Excel更新がスプレッドシートに反映されない」報告 2回** を受け、独立した2つのバグを発見・対策。コードレビューエージェントによる事後監査で防御コードも追加。**214テスト全PASS、現場で稼働中**。
@@ -234,6 +277,7 @@ python scripts/generate_pdf.py
 ### 次に予定しているタスク（優先度順）
 
 **🔴 短期（次回セッション直後にやる）**
+0. **【セッション11の残作業】削除伝播 Phase2 + 報告書**: `cleanup_orphans.py`（`docs/superpowers/plans/2026-06-24-nas-delete-propagation.md` に完全コード記載）で既存の溜まった孤立スプレッドを「ドライラン→目視確認→`--apply`」で一掃。顧客向け報告書 `docs/2026-06-24_tamatex機能改善報告書.html/.pdf`（untracked保留）は「price-course＝原価計算アプリ」表記の最終確認後にコミット判断。削除伝播本体は本番デプロイ・実証済み（現場稼働中）。
 1. **顧客に第2報メール送付**: スリープ復帰対策の報告（5/26 作成済み文面）
 2. **Excel日付反映問題の確証**: Sheets API でサンプル数件取得し「m月d日」表示崩れを確認 → 顧客からのスクショと突合
 3. 必要なら日付書式パッチ機能を実装（openpyxl で書き換え or Sheets API でパッチ）
