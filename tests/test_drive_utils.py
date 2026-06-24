@@ -15,6 +15,7 @@ from tamatex.drive_utils import (
     ensure_subfolder,
     get_file_parents,
     move_to_folder,
+    trash_file,
     with_retry,
 )
 
@@ -449,3 +450,33 @@ def test_apply_share_continues_on_individual_failure():
 
     # 例外が外に漏れないこと
     apply_share(svc, "fid", ["fail@example.com", "ok@example.com"])
+
+
+# ---------------------------------------------------------------------------
+# trash_file
+# ---------------------------------------------------------------------------
+
+def test_trash_file_sets_trashed_true():
+    """trashed=True を指定した update が対象 fileId で呼ばれること。"""
+    svc = MagicMock()
+    trash_file(svc, "fid")
+    body_calls = [
+        c for c in svc.files().update.call_args_list if c.kwargs.get("body")
+    ]
+    assert any(c.kwargs["body"] == {"trashed": True} for c in body_calls)
+    assert any(c.kwargs.get("fileId") == "fid" for c in body_calls)
+
+
+def test_trash_file_ignores_404():
+    """既に存在しない(404)場合は例外を握りつぶす。"""
+    svc = MagicMock()
+    svc.files().update().execute.side_effect = _mk_http_error(404)
+    trash_file(svc, "missing")  # raise しないこと
+
+
+def test_trash_file_raises_on_non_404():
+    """404 以外の HttpError はそのまま送出する。"""
+    svc = MagicMock()
+    svc.files().update().execute.side_effect = _mk_http_error(403)
+    with pytest.raises(HttpError):
+        trash_file(svc, "forbidden")

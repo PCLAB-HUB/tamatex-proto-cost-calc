@@ -21,6 +21,7 @@ from tamatex.drive_utils import (
     ensure_folder_path,
     ensure_subfolder,
     move_to_folder,
+    trash_file,
 )
 from tamatex.logger import setup_logger
 from tamatex.nas_auth import authenticate_nas
@@ -33,6 +34,22 @@ logger = logging.getLogger("tamatex")
 
 SHEETS_SUBFOLDER = "Sheets"
 PDF_SUBFOLDER = "PDF"
+
+MASS_DELETE_MIN = 5       # これ未満の削除は常に通す（小規模整理を妨げない）
+MASS_DELETE_RATIO = 0.4   # 登録総数のこの割合を超える削除はブロック
+
+
+def _is_mass_deletion(deleted_count: int, stored_total: int) -> bool:
+    """一括消失ガード判定。True なら異常とみなし削除をスキップすべき。
+
+    NAS部分マウント失敗時に大量ファイルが誤って削除判定されるのを防ぐ。
+    """
+    if deleted_count < MASS_DELETE_MIN:
+        return False
+    if stored_total <= 0:
+        return False
+    return deleted_count > stored_total * MASS_DELETE_RATIO
+
 
 _shutdown_event = threading.Event()
 
@@ -179,11 +196,10 @@ def sync_cycle(
             )
 
     if not files_to_sync:
-        logger.info("変更なし — スキップ")
+        logger.info("変更なし（新規/更新なし）— 削除検知のみ評価")
         stats["skipped"] = stats["scanned"]
-        return stats
-
-    stats["skipped"] = stats["scanned"] - len(files_to_sync)
+    else:
+        stats["skipped"] = stats["scanned"] - len(files_to_sync)
 
     # 3. 変更ファイルを同期
     for file_info in files_to_sync:
@@ -254,12 +270,29 @@ def sync_cycle(
             logger.error("同期失敗（スキップ）: %s - %s", file_name, e, exc_info=True)
             stats["errors"] += 1
 
-    # 4. NAS上から削除されたファイル — Drive側は保持、状態のみ除去
-    for deleted_path in changes.deleted_paths:
-        logger.warning(
-            "NAS上から削除検知: %s（Drive上のSheets/PDFは保持）", deleted_path
-        )
-        state_db.remove_state(deleted_path)
+    # 4. NAS削除のDrive追従（一括消失ガード付き）
+    deleted = changes.deleted_paths
+    if deleted:
+        if _is_mass_deletion(len(deleted), changes.stored_total):
+            logger.warning(
+                "一括消失ガード発動: 削除候補=%d件 / 登録総数=%d件。"
+                "NAS部分障害の可能性があるため今サイクルの削除をスキップします。",
+                len(deleted), changes.stored_total,
+            )
+        else:
+            for deleted_path in deleted:
+                try:
+                    state = state_db.get_state(deleted_path)
+                    if state:
+                        if state.spreadsheet_id:
+                            trash_file(service, state.spreadsheet_id)
+                        if state.pdf_file_id:
+                            trash_file(service, state.pdf_file_id)
+                    state_db.remove_state(deleted_path)
+                    logger.info("NAS削除を追従（Driveゴミ箱へ移動）: %s", deleted_path)
+                except Exception as e:
+                    logger.error("削除追従エラー（スキップ）: %s - %s", deleted_path, e)
+                    stats["errors"] += 1
 
     return stats
 

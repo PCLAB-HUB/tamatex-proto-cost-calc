@@ -26,6 +26,7 @@ class ChangeResult:
     new_files: list[FileInfo]
     modified_files: list[FileInfo]
     deleted_paths: list[str]
+    stored_total: int = 0
 
 
 def _compute_file_hash(path: Path) -> str:
@@ -121,4 +122,5 @@ def detect_changes(current_files: list[FileInfo], state_db: StateDB) -> ChangeRe
         new_files=new_files,
         modified_files=modified_files,
         deleted_paths=deleted_paths,
+        stored_total=len(stored_states),
     )

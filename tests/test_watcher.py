@@ -343,3 +343,23 @@ def test_detect_changes_multiple_deletions(db):
 
     assert len(result.deleted_paths) == 2
     assert set(result.deleted_paths) == {"/nas/del_2.xlsx", "/nas/del_3.xlsx"}
+
+
+def test_detect_changes_reports_stored_total(db):
+    """ChangeResult.stored_total が DB 登録総数を反映すること。"""
+    db.update_state("/nas/a.xlsx", 1.0, "h1", "s1")
+    db.update_state("/nas/b.xlsx", 1.0, "h2", "s2")
+
+    current_files = [
+        FileInfo("/nas/a.xlsx", 1.0, "h1"),
+        FileInfo("/nas/c.xlsx", 1.0, "h3"),
+    ]
+    result = detect_changes(current_files, db)
+
+    assert result.stored_total == 2
+
+
+def test_detect_changes_stored_total_zero_for_empty_db(db):
+    """空DBなら stored_total は 0。"""
+    result = detect_changes([FileInfo("/nas/x.xlsx", 1.0, "h")], db)
+    assert result.stored_total == 0

@@ -310,3 +310,32 @@ def apply_share(service, file_id: str, emails: list[str]) -> None:
             logger.info("共有追加: %s → %s (閲覧者)", file_id, email)
         except HttpError as e:
             logger.warning("共有設定失敗（続行）: %s → %s - %s", file_id, email, e)
+
+
+def trash_file(service, file_id: str) -> None:
+    """ファイルを Drive のゴミ箱へ移動する（完全削除しない・30日復元可）。
+
+    既に存在しない (404) 場合は目的達成とみなし握りつぶす。
+    それ以外の HttpError / 例外はそのまま送出する。
+    """
+    try:
+        with_retry(
+            lambda: service.files().update(
+                fileId=file_id,
+                body={"trashed": True},
+                fields="id,trashed",
+                supportsAllDrives=True,
+            ).execute(),
+            op_name=f"files.update(trash:{file_id})",
+        )
+        logger.info("Driveゴミ箱へ移動: %s", file_id)
+    except HttpError as e:
+        raw = getattr(e.resp, "status", None) if getattr(e, "resp", None) else None
+        try:
+            status = int(raw) if raw is not None else None
+        except (TypeError, ValueError):
+            status = None
+        if status == 404:
+            logger.info("ゴミ箱移動: 対象は既に存在しない (404, 無視): %s", file_id)
+            return
+        raise
