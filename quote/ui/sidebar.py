@@ -17,8 +17,12 @@ def render_sidebar(initial: GlobalParams | None = None) -> GlobalParams:
     d = initial or _DEFAULT
     ce = d.container_expenses
 
-    st.sidebar.header("見積もりパラメータ")
-    st.sidebar.caption("この見積もりに適用される設定")
+    st.sidebar.markdown("#### 見積もりパラメータ")
+    st.sidebar.markdown(
+        '<p style="font-size:0.75rem;color:#94A3B8;margin-top:-8px;">'
+        'この見積もりに適用される設定</p>',
+        unsafe_allow_html=True,
+    )
 
     st.sidebar.subheader("為替・運賃")
     internal_rate = st.sidebar.number_input(

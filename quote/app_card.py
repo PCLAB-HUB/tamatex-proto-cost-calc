@@ -32,12 +32,74 @@ st.markdown(
     """
     <style>
     .stApp { background-color: #F8F9FA; }
-    [data-testid="stSidebar"] { background-color: #FFFFFF; border-right: 1px solid #E8EAED; }
-    [data-testid="stMetricValue"] { font-size: 1.3rem; }
+
+    /* サイドバー全体 */
+    [data-testid="stSidebar"] {
+        background-color: #1E293B;
+        border-right: none;
+    }
+    [data-testid="stSidebar"] * {
+        color: #E2E8F0 !important;
+    }
+    [data-testid="stSidebar"] h3 {
+        color: #94A3B8 !important;
+        font-size: 0.75rem !important;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+    }
+    [data-testid="stSidebar"] hr {
+        border-color: #334155 !important;
+    }
+
+    /* サイドバーのナビボタン */
+    [data-testid="stSidebar"] button[kind="secondary"] {
+        background-color: #334155 !important;
+        border: 1px solid #475569 !important;
+        color: #E2E8F0 !important;
+        border-radius: 6px !important;
+    }
+    [data-testid="stSidebar"] button[kind="secondary"]:hover {
+        background-color: #475569 !important;
+        border-color: #64748B !important;
+    }
+
+    /* サイドバーの数値入力 */
+    [data-testid="stSidebar"] input {
+        background-color: #334155 !important;
+        border: 1px solid #475569 !important;
+        color: #F1F5F9 !important;
+        border-radius: 4px !important;
+    }
+    [data-testid="stSidebar"] input:focus {
+        border-color: #60A5FA !important;
+        box-shadow: 0 0 0 1px #60A5FA !important;
+    }
+    [data-testid="stSidebar"] label {
+        color: #CBD5E1 !important;
+        font-size: 0.82rem !important;
+    }
+
+    /* サイドバーのセクション見出し */
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h4,
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h5 {
+        color: #60A5FA !important;
+        font-size: 0.85rem !important;
+    }
+
+    /* サイドバーのexpander */
+    [data-testid="stSidebar"] [data-testid="stExpander"] {
+        background-color: #1E293B !important;
+        border: 1px solid #334155 !important;
+    }
+
+    /* ±ボタン控えめに */
     button[data-testid="stNumberInputStepUp"],
     button[data-testid="stNumberInputStepDown"] { opacity: 0.4; }
     button[data-testid="stNumberInputStepUp"]:hover,
     button[data-testid="stNumberInputStepDown"]:hover { opacity: 1; }
+
+    /* メインエリア */
+    [data-testid="stMetricValue"] { font-size: 1.3rem; }
     </style>
     """,
     unsafe_allow_html=True,
