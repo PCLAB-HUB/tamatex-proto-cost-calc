@@ -107,3 +107,10 @@ TARIFF_RATES: dict[str, float] = {
     "4.8%": 0.048,
     "8.0%": 0.08,
 }
+
+SUPPLIERS = ["SUNVIM", "（その他）"]
+PORTS = ["神戸経由", "大阪直", "東京直", "（その他）"]
+DELIVERY_TO = ["コーヨー", "（その他）"]
+SHIP_TO = ["関東", "関西", "中部", "九州", "（その他）"]
+CONTAINER_FT = [20, 40]
+METHODS = ["コンテナ", "路線便"]
