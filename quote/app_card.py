@@ -6,7 +6,7 @@ import streamlit as st
 
 from quote.data.defaults import TARIFF_RATES
 from quote.data.mock_data import seed_mock_data
-from quote.engine.models import GlobalParams, ProductInput
+from quote.engine.models import ContainerExpenses, GlobalParams, ProductInput
 from quote.storage.db import (
     get_quote,
     list_customers,
@@ -69,7 +69,26 @@ with st.sidebar:
         st.rerun()
     st.markdown("---")
 
-params = render_sidebar()
+# 編集中の見積もりからパラメータを読み込む
+_saved_params = None
+if page == "edit" and "edit_quote_id" in st.session_state:
+    _q = get_quote(st.session_state.edit_quote_id)
+    if _q and "params" in _q:
+        from dataclasses import fields as dc_fields
+        _p = _q["params"]
+        _ce_data = _p.pop("container_expenses", {})
+        _ce = ContainerExpenses(**{
+            f.name: _ce_data.get(f.name, f.default)
+            for f in dc_fields(ContainerExpenses)
+        })
+        _saved_params = GlobalParams(
+            **{f.name: _p.get(f.name, f.default)
+               for f in dc_fields(GlobalParams)
+               if f.name != "container_expenses"},
+            container_expenses=_ce,
+        )
+
+params = render_sidebar(initial=_saved_params)
 
 # --- ヘッダー ---
 st.markdown(

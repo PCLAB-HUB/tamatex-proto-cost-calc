@@ -55,7 +55,7 @@ def import_all():
     seed_mock_data()
     init_db()
 
-    products = []
+    groups = {}
     for row in range(9, 134):
         name = _val(ws, row, 'H')
         if not name:
@@ -145,48 +145,69 @@ def import_all():
             num_colors=_int(ws, row, 'DL', 1),
             retail_price=_float(ws, row, 'DP'),
         )
-        products.append(p)
-        print(f"  Row {row}: {p.product_name} (FOB=${p.fob_usd}, 売価¥{p.quote_price})")
+        rate = _float(ws, row, 'AJ', 152.0)
+        container_key = (
+            rate,
+            _float(ws, row, 'AS'), _float(ws, row, 'AT'),
+            _float(ws, row, 'AU'), _float(ws, row, 'AV'),
+            _float(ws, row, 'AW'), _float(ws, row, 'AX'),
+            _float(ws, row, 'AY'), _float(ws, row, 'AZ'),
+            _float(ws, row, 'BA'), _float(ws, row, 'BB'),
+            _float(ws, row, 'BC'),
+        )
 
-    params = GlobalParams(
-        internal_rate=152.0,
-        current_rate=152.0,
-        overseas_freight_usd=240.0,
-        cny_to_usd_rate=0.17,
-        cny_to_jpy_rate=13.0,
-        insurance_risk_rate=0.0018,
-        tariff_rate=0.0,
-        b_grade_loss_rate=0.01,
-        sub_material_loss_rate=0.05,
-        amortization_margin=0.05,
-        margin=0.20,
-        container_expenses=ContainerExpenses(
-            cy_charge=30000.0,
-            lss=0.0,
-            lss_cic_usd=180.0,
-            thc=36000.0,
-            emc=3000.0,
-            do_fee=5000.0,
-            doc_fee=6000.0,
-            customs_fee=11800.0,
-            handling_fee=8000.0,
-            drayage=50000.0,
-            devanning=14000.0,
-        ),
-    )
+        if container_key not in groups:
+            groups[container_key] = []
+        groups[container_key].append(p)
+        print(f"  Row {row}: {p.product_name} (FOB=${p.fob_usd}, 為替={rate})")
 
-    quote_id = save_quote(
-        customer_id=1,
-        staff_id=1,
-        title="Excel全データ検証用（94商品）",
-        products=products,
-        params=params,
-        notes="原価計算書参考資料.xlsx の Row 9-133 を全件インポート",
-    )
+    print(f"\n=== 為替・経費グループ: {len(groups)}件 ===")
+    for i, (key, items) in enumerate(groups.items()):
+        rate = key[0]
+        ce_vals = key[1:]
+
+        params = GlobalParams(
+            internal_rate=rate,
+            current_rate=rate,
+            overseas_freight_usd=240.0,
+            cny_to_usd_rate=0.17,
+            cny_to_jpy_rate=13.0,
+            insurance_risk_rate=0.0018,
+            tariff_rate=0.0,
+            b_grade_loss_rate=0.01,
+            sub_material_loss_rate=0.05,
+            amortization_margin=0.05,
+            margin=0.20,
+            container_expenses=ContainerExpenses(
+                cy_charge=ce_vals[0],
+                lss=ce_vals[1],
+                lss_cic_usd=ce_vals[2],
+                thc=ce_vals[3],
+                emc=ce_vals[4],
+                do_fee=ce_vals[5],
+                doc_fee=ce_vals[6],
+                customs_fee=ce_vals[7],
+                handling_fee=ce_vals[8],
+                drayage=ce_vals[9],
+                devanning=ce_vals[10],
+            ),
+        )
+
+        title = f"Excel検証 為替{rate:.0f}円 ({len(items)}商品)"
+        quote_id = save_quote(
+            customer_id=1,
+            staff_id=1,
+            title=title,
+            products=items,
+            params=params,
+            notes=f"為替={rate}円, コンテナ経費計={sum(ce_vals[0:2]) + ce_vals[2]*rate + sum(ce_vals[3:]):,.0f}",
+        )
+        print(f"  グループ{i+1}: 為替{rate:.0f}円, {len(items)}商品 → 見積もりID={quote_id}")
+
+    total = sum(len(v) for v in groups.values())
     print(f"\n=== インポート完了 ===")
-    print(f"商品数: {len(products)}")
-    print(f"見積もりID: {quote_id}")
-    print(f"ツールで「見積もり一覧」から開いて確認してください。")
+    print(f"総商品数: {total}")
+    print(f"見積もり数: {len(groups)}")
 
 
 if __name__ == "__main__":
