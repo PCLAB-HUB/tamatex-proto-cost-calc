@@ -61,11 +61,17 @@ with st.sidebar:
     if st.button("📋 見積もり一覧", use_container_width=True):
         st.session_state.page = "list"
         st.session_state.pop("edit_loaded", None)
+        for k in list(st.session_state.keys()):
+            if k.startswith("sp_") or k.startswith("card_"):
+                del st.session_state[k]
         st.rerun()
     if st.button("＋ 新規見積もり", use_container_width=True):
         st.session_state.page = "new"
         st.session_state.pop("edit_quote_id", None)
         st.session_state.pop("edit_loaded", None)
+        for k in list(st.session_state.keys()):
+            if k.startswith("sp_") or k.startswith("card_"):
+                del st.session_state[k]
         st.rerun()
     st.markdown("---")
 
