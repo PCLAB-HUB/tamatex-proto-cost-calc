@@ -92,11 +92,18 @@ st.markdown(
         border: 1px solid #334155 !important;
     }
 
-    /* ±ボタン控えめに */
-    button[data-testid="stNumberInputStepUp"],
-    button[data-testid="stNumberInputStepDown"] { opacity: 0.4; }
-    button[data-testid="stNumberInputStepUp"]:hover,
-    button[data-testid="stNumberInputStepDown"]:hover { opacity: 1; }
+    /* サイドバーの±ボタン */
+    [data-testid="stSidebar"] button[data-testid="stNumberInputStepUp"],
+    [data-testid="stSidebar"] button[data-testid="stNumberInputStepDown"] {
+        color: #E2E8F0 !important;
+        background-color: #475569 !important;
+        border-color: #64748B !important;
+    }
+    /* メインエリアの±ボタン控えめに */
+    section.main button[data-testid="stNumberInputStepUp"],
+    section.main button[data-testid="stNumberInputStepDown"] { opacity: 0.4; }
+    section.main button[data-testid="stNumberInputStepUp"]:hover,
+    section.main button[data-testid="stNumberInputStepDown"]:hover { opacity: 1; }
 
     /* メインエリア */
     [data-testid="stMetricValue"] { font-size: 1.3rem; }
