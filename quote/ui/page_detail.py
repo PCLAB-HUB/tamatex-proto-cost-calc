@@ -9,6 +9,7 @@ import streamlit as st
 from quote.engine.calc import calculate
 from quote.engine.models import GlobalParams, ProductInput, QuoteResult
 from quote.storage.db import get_quote, list_customers, list_staff, save_quote
+from quote.ui.pdf_export import generate_quote_html
 
 
 def _fmt_jpy(v: float) -> str:
@@ -177,3 +178,12 @@ def render_detail_page(quote_id: int, params: GlobalParams) -> None:
                 if k.startswith("sp_") or k.startswith("card_"):
                     del st.session_state[k]
             st.rerun()
+    with b4:
+        html_bytes = generate_quote_html(quote, results, params).encode("utf-8")
+        st.download_button(
+            label="📄 見積書出力",
+            data=html_bytes,
+            file_name=f"{quote.get('quote_number', 'quote')}.html",
+            mime="text/html",
+            use_container_width=True,
+        )

@@ -90,6 +90,69 @@ def get_customer(customer_id: int) -> dict | None:
     return dict(row) if row else None
 
 
+def add_customer(
+    name: str,
+    contact_person: str = "",
+    phone: str = "",
+    address: str = "",
+) -> int:
+    conn = _conn()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        cur = conn.execute(
+            "INSERT INTO customers (name, contact_person, phone, address) VALUES (?, ?, ?, ?)",
+            (name, contact_person, phone, address),
+        )
+        conn.execute("COMMIT")
+        return cur.lastrowid
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    finally:
+        conn.close()
+
+
+def update_customer(
+    customer_id: int,
+    name: str,
+    contact_person: str = "",
+    phone: str = "",
+    address: str = "",
+) -> None:
+    conn = _conn()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute(
+            "UPDATE customers SET name=?, contact_person=?, phone=?, address=? WHERE id=?",
+            (name, contact_person, phone, address, customer_id),
+        )
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    finally:
+        conn.close()
+
+
+def delete_customer(customer_id: int) -> bool:
+    conn = _conn()
+    try:
+        in_use = conn.execute(
+            "SELECT COUNT(*) FROM quotes WHERE customer_id=?", (customer_id,)
+        ).fetchone()[0]
+        if in_use > 0:
+            return False
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute("DELETE FROM customers WHERE id=?", (customer_id,))
+        conn.execute("COMMIT")
+        return True
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    finally:
+        conn.close()
+
+
 # --- 担当者 ---
 
 def list_staff() -> list[dict]:
