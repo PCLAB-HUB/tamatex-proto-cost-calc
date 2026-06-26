@@ -13,8 +13,10 @@ from quote.storage.db import (
     list_staff,
     save_quote,
 )
+from quote.storage.settings import load_default_params
 from quote.ui.card_view import render_card_view
 from quote.ui.page_list import render_list_page
+from quote.ui.page_settings import render_settings_page
 from quote.ui.sidebar import render_sidebar
 
 seed_mock_data()
@@ -73,10 +75,16 @@ with st.sidebar:
             if k.startswith("sp_") or k.startswith("card_"):
                 del st.session_state[k]
         st.rerun()
+    if st.button("⚙️ デフォルト設定", use_container_width=True):
+        st.session_state.page = "settings"
+        for k in list(st.session_state.keys()):
+            if k.startswith("sp_") or k.startswith("card_"):
+                del st.session_state[k]
+        st.rerun()
     st.markdown("---")
 
-# 編集中の見積もりからパラメータを読み込む
-_saved_params = None
+# パラメータの決定: 編集時=保存済み値、新規時=デフォルト設定
+_initial_params = None
 if page == "edit" and "edit_quote_id" in st.session_state:
     _q = get_quote(st.session_state.edit_quote_id)
     if _q and "params" in _q:
@@ -87,14 +95,19 @@ if page == "edit" and "edit_quote_id" in st.session_state:
             f.name: _ce_data.get(f.name, f.default)
             for f in dc_fields(ContainerExpenses)
         })
-        _saved_params = GlobalParams(
+        _initial_params = GlobalParams(
             **{f.name: _p.get(f.name, f.default)
                for f in dc_fields(GlobalParams)
                if f.name != "container_expenses"},
             container_expenses=_ce,
         )
+elif page == "new":
+    _initial_params = load_default_params()
 
-params = render_sidebar(initial=_saved_params)
+if page != "settings":
+    params = render_sidebar(initial=_initial_params)
+else:
+    params = _initial_params or GlobalParams()
 
 # --- ヘッダー ---
 st.markdown(
@@ -103,9 +116,15 @@ st.markdown(
 )
 
 # =======================================================================
+# デフォルト設定
+# =======================================================================
+if page == "settings":
+    render_settings_page()
+
+# =======================================================================
 # 見積もり一覧
 # =======================================================================
-if page == "list":
+elif page == "list":
     render_list_page()
 
 # =======================================================================
