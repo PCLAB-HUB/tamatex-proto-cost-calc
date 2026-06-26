@@ -135,7 +135,7 @@ def _render_product_card(idx: int) -> ProductInput | None:
     with s7:
         packing = st.number_input("入数", key=_key(idx, "pk"), value=1, min_value=1)
     with s8:
-        load = st.number_input("積載量", key=_key(idx, "ld"), value=0.0, format="%.0f")
+        load = st.number_input("積載量", key=_key(idx, "ld"), value=0.0, format="%.1f")
         if load <= 0:
             _hint("積載量を入力してください（運賃計算に必須）")
 
@@ -158,7 +158,7 @@ def _render_product_card(idx: int) -> ProductInput | None:
     )
     p1, p2, p3, p4 = st.columns(4)
     with p1:
-        qp = st.number_input("見積売価(円)", key=_key(idx, "qp"), value=0.0, format="%.0f")
+        qp = st.number_input("見積売価(円)", key=_key(idx, "qp"), value=0.0, format="%.1f")
         if qp <= 0:
             _hint("見積売価を入力してください")
     with p2:
@@ -168,7 +168,7 @@ def _render_product_card(idx: int) -> ProductInput | None:
     with p3:
         colors = st.number_input("配色", key=_key(idx, "col"), value=1, min_value=1)
     with p4:
-        retail = st.number_input("上代(円)", key=_key(idx, "ret"), value=0.0, format="%.0f")
+        retail = st.number_input("上代(円)", key=_key(idx, "ret"), value=0.0, format="%.1f")
         if retail <= 0:
             _hint("上代を入力してください（定価率の計算に必要）")
 
