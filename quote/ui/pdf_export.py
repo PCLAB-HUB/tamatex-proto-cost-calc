@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from html import escape as _esc
 
 from quote.engine.models import GlobalParams, ProductInput, QuoteResult
 
@@ -22,14 +23,13 @@ def generate_quote_html(
 ) -> str:
     """見積書 HTML 文字列を生成する."""
     today = date.today().isoformat()
-    quote_number = quote.get("quote_number", "")
-    customer_name = quote.get("customer_name") or ""
-    staff_name = quote.get("staff_name") or ""
-    title = quote.get("title") or ""
-    notes = quote.get("notes") or ""
-    created_at = (quote.get("created_at") or "")[:10]
+    quote_number = _esc(quote.get("quote_number", ""))
+    customer_name = _esc(quote.get("customer_name") or "")
+    staff_name = _esc(quote.get("staff_name") or "")
+    title = _esc(quote.get("title") or "")
+    notes = _esc(quote.get("notes") or "")
+    created_at = _esc((quote.get("created_at") or "")[:10])
 
-    # 明細行
     rows_html = ""
     total_sales = 0.0
     total_profit = 0.0
@@ -40,7 +40,7 @@ def generate_quote_html(
         rows_html += (
             f"<tr>"
             f"<td class='center'>{i + 1}</td>"
-            f"<td>{p.product_name}</td>"
+            f"<td>{_esc(p.product_name)}</td>"
             f"<td class='right'>{_fmt_jpy(pr.quote_price)}</td>"
             f"<td class='right'>{pr.lot:,}</td>"
             f"<td class='right'>{_fmt_jpy(pr.sales_amount)}</td>"
