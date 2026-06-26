@@ -100,6 +100,46 @@ def list_staff() -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def add_staff(name: str, department: str = "") -> int:
+    conn = _conn()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        cur = conn.execute(
+            "INSERT INTO staff (name, department) VALUES (?, ?)",
+            (name, department),
+        )
+        conn.execute("COMMIT")
+        return cur.lastrowid
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    finally:
+        conn.close()
+
+
+def update_staff(staff_id: int, name: str, department: str = "") -> None:
+    with _conn() as conn:
+        conn.execute(
+            "UPDATE staff SET name=?, department=? WHERE id=?",
+            (name, department, staff_id),
+        )
+
+
+def delete_staff(staff_id: int) -> bool:
+    conn = _conn()
+    try:
+        in_use = conn.execute(
+            "SELECT COUNT(*) FROM quotes WHERE staff_id=?", (staff_id,)
+        ).fetchone()[0]
+        if in_use > 0:
+            return False
+        conn.execute("DELETE FROM staff WHERE id=?", (staff_id,))
+        conn.close()
+        return True
+    finally:
+        conn.close()
+
+
 # --- 見積もり CRUD ---
 
 def save_quote(
@@ -153,26 +193,27 @@ def save_quote(
     return quote_id
 
 
-def list_quotes(customer_id: int | None = None) -> list[dict]:
-    with _conn() as conn:
-        if customer_id:
-            rows = conn.execute(
-                """SELECT q.*, c.name AS customer_name, s.name AS staff_name
-                   FROM quotes q
-                   LEFT JOIN customers c ON q.customer_id = c.id
-                   LEFT JOIN staff s ON q.staff_id = s.id
-                   WHERE q.customer_id = ?
-                   ORDER BY q.updated_at DESC""",
-                (customer_id,),
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                """SELECT q.*, c.name AS customer_name, s.name AS staff_name
-                   FROM quotes q
-                   LEFT JOIN customers c ON q.customer_id = c.id
-                   LEFT JOIN staff s ON q.staff_id = s.id
-                   ORDER BY q.updated_at DESC"""
-            ).fetchall()
+def list_quotes(
+    customer_id: int | None = None, staff_id: int | None = None
+) -> list[dict]:
+    conn = _conn()
+    query = """SELECT q.*, c.name AS customer_name, s.name AS staff_name
+               FROM quotes q
+               LEFT JOIN customers c ON q.customer_id = c.id
+               LEFT JOIN staff s ON q.staff_id = s.id"""
+    conditions = []
+    params = []
+    if customer_id:
+        conditions.append("q.customer_id = ?")
+        params.append(customer_id)
+    if staff_id:
+        conditions.append("q.staff_id = ?")
+        params.append(staff_id)
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    query += " ORDER BY q.updated_at DESC"
+    rows = conn.execute(query, params).fetchall()
+    conn.close()
     return [dict(r) for r in rows]
 
 

@@ -18,6 +18,7 @@ from quote.ui.page_detail import render_detail_page
 from quote.ui.page_list import render_list_page
 from quote.ui.page_product import render_product_page
 from quote.ui.page_settings import render_settings_page
+from quote.ui.page_staff import render_staff_page
 from quote.ui.sidebar import render_sidebar
 
 seed_mock_data()
@@ -141,6 +142,10 @@ with st.sidebar:
         st.session_state.page = "settings"
         _clear_form_state()
         st.rerun()
+    if st.button("👤 担当者管理", use_container_width=True):
+        st.session_state.page = "staff"
+        _clear_form_state()
+        st.rerun()
     st.markdown("---")
 
 # パラメータ決定
@@ -164,7 +169,7 @@ if page in ("detail", "product") and "edit_quote_id" in st.session_state:
 elif page == "new":
     _initial_params = load_default_params()
 
-if page not in ("settings", "list"):
+if page not in ("settings", "staff", "list"):
     params = render_sidebar(initial=_initial_params)
 else:
     params = _initial_params or GlobalParams()
@@ -180,6 +185,9 @@ st.markdown(
 # =======================================================================
 if page == "settings":
     render_settings_page()
+
+elif page == "staff":
+    render_staff_page()
 
 # =======================================================================
 # ① 見積もり一覧

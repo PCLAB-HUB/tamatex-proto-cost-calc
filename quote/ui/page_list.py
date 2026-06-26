@@ -4,26 +4,34 @@ from __future__ import annotations
 
 import streamlit as st
 
-from quote.storage.db import delete_quote, list_customers, list_quotes
+from quote.storage.db import delete_quote, list_customers, list_quotes, list_staff
 
 
 def render_list_page() -> None:
-    """見積もり一覧を表示し、選択された見積もりIDを返す."""
+    """見積もり一覧を表示."""
     st.markdown("### 📋 見積もり一覧")
 
     customers = list_customers()
+    staff = list_staff()
     customer_options = {"すべて": None}
     for c in customers:
         customer_options[c["name"]] = c["id"]
+    staff_options = {"すべて": None}
+    for s in staff:
+        staff_options[s["name"]] = s["id"]
 
-    col_filter, col_new = st.columns([3, 1])
-    with col_filter:
+    f1, f2, f3 = st.columns([2, 2, 1])
+    with f1:
         selected_customer = st.selectbox(
-            "顧客でフィルタ",
-            options=list(customer_options.keys()),
+            "顧客", options=list(customer_options.keys()),
             key="list_filter_customer",
         )
-    with col_new:
+    with f2:
+        selected_staff = st.selectbox(
+            "担当者", options=list(staff_options.keys()),
+            key="list_filter_staff",
+        )
+    with f3:
         st.write("")
         if st.button("＋ 新規見積もり", type="primary", use_container_width=True):
             st.session_state.page = "new"
@@ -31,10 +39,11 @@ def render_list_page() -> None:
             st.rerun()
 
     cid = customer_options[selected_customer]
-    quotes = list_quotes(customer_id=cid)
+    sid = staff_options[selected_staff]
+    quotes = list_quotes(customer_id=cid, staff_id=sid)
 
     if not quotes:
-        st.info("見積もりがまだありません。「新規見積もり」から作成してください。")
+        st.info("条件に一致する見積もりがありません。")
         return
 
     for q in quotes:
@@ -43,7 +52,8 @@ def render_list_page() -> None:
             with c1:
                 st.markdown(
                     f"**{q['quote_number']}**<br>"
-                    f"<span style='font-size:0.85rem;color:#5F6368;'>{q.get('title') or '(無題)'}</span>",
+                    f"<span style='font-size:0.85rem;color:#5F6368;'>"
+                    f"{q.get('title') or '(無題)'}</span>",
                     unsafe_allow_html=True,
                 )
             with c2:
