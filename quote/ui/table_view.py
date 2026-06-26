@@ -152,7 +152,7 @@ def render_table_view(params: GlobalParams) -> None:
                 "見積売価": r.quote_price,
                 "歩積込": r.stepped_price,
                 "粗利額/枚": r.gross_profit_unit,
-                "粗利率": r.gross_profit_rate,
+                "粗利率": r.gross_profit_rate * 100,
                 "売上金額": r.sales_amount,
                 "粗利金額": r.gross_profit_total,
             }

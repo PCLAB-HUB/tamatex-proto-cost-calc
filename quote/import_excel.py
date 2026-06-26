@@ -100,6 +100,10 @@ def import_all():
             packing_usd=_float(ws, row, 'AH'),
             material_usd=_float(ws, row, 'AI'),
             tariff_rate_override=_float(ws, row, 'AP'),
+            quote_price_ex_amort=_float(ws, row, 'DZ'),
+            center_fee_ex_amort=_float(ws, row, 'EA'),
+            rebate_ex_amort=_float(ws, row, 'EB'),
+            retail_price_ex_amort=_float(ws, row, 'EI'),
             ribbon=_float(ws, row, 'BH'),
             name_label_2=_float(ws, row, 'BI'),
             name_label_3=_float(ws, row, 'BJ'),
@@ -146,8 +150,10 @@ def import_all():
             retail_price=_float(ws, row, 'DP'),
         )
         rate = _float(ws, row, 'AJ', 152.0)
+        current_rate = _float(ws, row, 'AK', rate)
         container_key = (
             rate,
+            current_rate,
             _float(ws, row, 'AS'), _float(ws, row, 'AT'),
             _float(ws, row, 'AU'), _float(ws, row, 'AV'),
             _float(ws, row, 'AW'), _float(ws, row, 'AX'),
@@ -159,16 +165,17 @@ def import_all():
         if container_key not in groups:
             groups[container_key] = []
         groups[container_key].append(p)
-        print(f"  Row {row}: {p.product_name} (FOB=${p.fob_usd}, 為替={rate})")
+        print(f"  Row {row}: {p.product_name} (FOB=${p.fob_usd}, 内部為替={rate}, 現行為替={current_rate})")
 
     print(f"\n=== 為替・経費グループ: {len(groups)}件 ===")
     for i, (key, items) in enumerate(groups.items()):
         rate = key[0]
-        ce_vals = key[1:]
+        current_rate = key[1]
+        ce_vals = key[2:]
 
         params = GlobalParams(
             internal_rate=rate,
-            current_rate=rate,
+            current_rate=current_rate,
             overseas_freight_usd=240.0,
             cny_to_usd_rate=0.17,
             cny_to_jpy_rate=13.0,

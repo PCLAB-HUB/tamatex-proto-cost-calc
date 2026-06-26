@@ -71,7 +71,16 @@ def render_product_page(
             if is_new:
                 all_products.append(product)
             else:
-                all_products[product_index] = product
+                # card_view が管理するフィールドのみ上書きし、
+                # 管理外フィールド（charge_up_unit, die_charge, inspection_* 等）は元の値を保持する
+                valid_fields_set = {f.name for f in dc_fields(ProductInput)}
+                card_managed = set(_FIELD_MAP.keys()) | {"tariff_rate_override"}
+                base = {k: v for k, v in items[product_index].items() if k in valid_fields_set}
+                product_dict = asdict(product)
+                for field in card_managed:
+                    if field in product_dict:
+                        base[field] = product_dict[field]
+                all_products[product_index] = ProductInput(**base)
             save_quote(
                 customer_id=quote["customer_id"],
                 staff_id=quote["staff_id"],
