@@ -144,17 +144,63 @@ def _render_product_card(idx: int) -> ProductInput | None:
         retail = st.number_input("上代(円)", key=_key(idx, "ret"), value=0.0, format="%.0f")
 
     # 詳細（折りたたみ）
-    with st.expander("詳細コスト設定"):
+    with st.expander("日本送付副資材経費/枚（BH-BT列）"):
+        st.caption("入力(使用頻度少ない)")
+        m1, m2, m3 = st.columns(3)
+        with m1:
+            v_ribbon = st.number_input("リボン", key=_key(idx, "ribbon"), value=0.0, format="%.1f")
+            v_nl2 = st.number_input("ネーム2", key=_key(idx, "nl2"), value=0.0, format="%.1f")
+            v_nl3 = st.number_input("ネーム3", key=_key(idx, "nl3"), value=0.0, format="%.1f")
+        with m2:
+            v_seal1 = st.number_input("シール1", key=_key(idx, "seal1"), value=0.0, format="%.1f")
+            v_seal2 = st.number_input("シール2", key=_key(idx, "seal2"), value=0.0, format="%.1f")
+            v_tag = st.number_input("タグ", key=_key(idx, "tag"), value=0.0, format="%.1f")
+        with m3:
+            v_bag = st.number_input("袋", key=_key(idx, "bag"), value=0.0, format="%.1f")
+            v_othermat = st.number_input("その他", key=_key(idx, "omat"), value=0.0, format="%.1f")
+            v_matfr = st.number_input("資材運賃", key=_key(idx, "matfr"), value=0.0, format="%.1f")
+
+    with st.expander("償却経費/ロット（BU-CJ列）"):
+        st.caption("入力(頻度少ない)")
+        a1, a2, a3 = st.columns(3)
+        with a1:
+            v_design = st.number_input("図案", key=_key(idx, "design"), value=0.0, format="%.0f")
+            v_jqcard = st.number_input("JQカード", key=_key(idx, "jqc"), value=0.0, format="%.0f")
+            v_embcard = st.number_input("刺繍カード", key=_key(idx, "embc"), value=0.0, format="%.0f")
+            v_printup = st.number_input("プリント型単価", key=_key(idx, "prup"), value=0.0, format="%.0f")
+            v_printcnt = st.number_input("型数", key=_key(idx, "prcnt"), value=0.0, format="%.0f")
+        with a2:
+            v_layout = st.number_input("レイアウト", key=_key(idx, "layout"), value=0.0, format="%.0f")
+            v_namepl = st.number_input("ネーム版代", key=_key(idx, "namepl"), value=0.0, format="%.0f")
+            v_sealpl = st.number_input("シール版", key=_key(idx, "sealpl"), value=0.0, format="%.0f")
+            v_tabpl = st.number_input("タベル版", key=_key(idx, "tabpl"), value=0.0, format="%.0f")
+            v_bagpl = st.number_input("袋版", key=_key(idx, "bagpl"), value=0.0, format="%.0f")
+        with a3:
+            v_cbpl = st.number_input("ダンボール版", key=_key(idx, "cbpl"), value=0.0, format="%.0f")
+            v_otherdep = st.number_input("その他償却", key=_key(idx, "odep"), value=0.0, format="%.0f")
+            v_sample = st.number_input("見本経費", key=_key(idx, "sample"), value=0.0, format="%.0f")
+            v_qinsp = st.number_input("品質検査代", key=_key(idx, "qinsp"), value=0.0, format="%.0f")
+            v_otheramort = st.number_input("その他", key=_key(idx, "oamort"), value=0.0, format="%.0f")
+
+    with st.expander("物流・加工・売価調整"):
+        st.caption("倉庫→納品先 物流経費（CN-CS列）")
         d1, d2, d3 = st.columns(3)
         with d1:
+            lcb = st.number_input("ダンボール代", key=_key(idx, "lcb"), value=0.0, format="%.0f")
             lio = st.number_input("入出庫料", key=_key(idx, "lio"), value=70.0, format="%.0f")
-            lslip = st.number_input("伝票手数料", key=_key(idx, "lsl"), value=100.0, format="%.0f")
         with d2:
             lstm = st.number_input("保管月数", key=_key(idx, "lm"), value=1.0, format="%.0f")
             lstf = st.number_input("保管料/月", key=_key(idx, "lf"), value=150.0, format="%.0f")
         with d3:
+            lslip = st.number_input("伝票手数料", key=_key(idx, "lsl"), value=100.0, format="%.0f")
             lfr = st.number_input("運賃/ケース", key=_key(idx, "lr"), value=700.0, format="%.0f")
+
+        st.caption("売価調整（DI-DJ列）")
+        sa1, sa2 = st.columns(2)
+        with sa1:
             cfee = st.number_input("センターフィー", key=_key(idx, "cf"), value=0.0, format="%.3f")
+        with sa2:
+            rebate_val = st.number_input("歩引率", key=_key(idx, "rebate"), value=0.0, format="%.3f")
 
     tariff_val = TARIFF_RATES.get(tariff_label, 0.0)
 
@@ -179,16 +225,42 @@ def _render_product_card(idx: int) -> ProductInput | None:
         other_processing_usd=oproc,
         loss_rate=loss,
         tariff_rate_override=tariff_val,
-        quote_price=qp,
-        lot_per_color=lot,
-        num_colors=colors,
-        retail_price=retail,
+        ribbon=v_ribbon,
+        name_label_2=v_nl2,
+        name_label_3=v_nl3,
+        seal_1=v_seal1,
+        seal_2=v_seal2,
+        tag=v_tag,
+        bag=v_bag,
+        other_material=v_othermat,
+        material_freight=v_matfr,
+        design_cost=v_design,
+        jq_card=v_jqcard,
+        embroidery_card=v_embcard,
+        print_unit_price=v_printup,
+        print_type_count=v_printcnt,
+        layout=v_layout,
+        name_plate=v_namepl,
+        seal_plate=v_sealpl,
+        tab_plate=v_tabpl,
+        bag_plate=v_bagpl,
+        cardboard_plate=v_cbpl,
+        other_depreciation=v_otherdep,
+        sample_cost=v_sample,
+        quality_inspection=v_qinsp,
+        other_amortization=v_otheramort,
+        logistics_cardboard=lcb,
         logistics_io_fee=lio,
         logistics_storage_months=lstm,
         logistics_storage_fee=lstf,
         logistics_slip_fee=lslip,
         logistics_freight=lfr,
         center_fee=cfee,
+        rebate=rebate_val,
+        quote_price=qp,
+        lot_per_color=lot,
+        num_colors=colors,
+        retail_price=retail,
     )
 
 
