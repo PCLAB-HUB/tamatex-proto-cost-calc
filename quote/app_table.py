@@ -29,7 +29,7 @@ st.markdown(
 )
 
 st.markdown(
-    '<h1 style="margin-bottom:0;">📊 ステーショナリー見積もり</h1>'
+    '<h1 style="margin-bottom:0;">📊 原価計算書見積もり（プロト）</h1>'
     '<p style="color:#5F6368; margin-top:4px;">A案: Excelライク・テーブル入力</p>',
     unsafe_allow_html=True,
 )

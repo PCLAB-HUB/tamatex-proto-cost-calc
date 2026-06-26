@@ -1,4 +1,4 @@
-"""ステーショナリー見積もりソフト — 3階層ナビゲーション."""
+"""原価計算書見積もり（プロト） — 3階層ナビゲーション."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ from quote.ui.sidebar import render_sidebar
 seed_mock_data()
 
 st.set_page_config(
-    page_title="ステーショナリー見積もりソフト",
+    page_title="原価計算書見積もり（プロト）",
     page_icon="📝",
     layout="wide",
 )
@@ -181,7 +181,7 @@ else:
 
 # --- ヘッダー ---
 st.markdown(
-    '<h1 style="margin-bottom:0;">📝 ステーショナリー見積もり</h1>',
+    '<h1 style="margin-bottom:0;">📝 原価計算書見積もり（プロト）</h1>',
     unsafe_allow_html=True,
 )
 

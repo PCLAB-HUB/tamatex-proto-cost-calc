@@ -9,6 +9,15 @@ from quote.engine.models import ContainerExpenses, GlobalParams
 _DEFAULT = GlobalParams()
 
 
+def _sidebar_hint(msg: str) -> None:
+    """サイドバー用の未入力注記."""
+    st.sidebar.markdown(
+        f'<p style="color:#E37400;font-size:0.75rem;margin:-10px 0 8px 2px;">'
+        f'⚠ {msg}</p>',
+        unsafe_allow_html=True,
+    )
+
+
 def render_sidebar(initial: GlobalParams | None = None) -> GlobalParams:
     """サイドバーに固定パラメータ入力を描画し、GlobalParamsを返す.
 
@@ -29,24 +38,34 @@ def render_sidebar(initial: GlobalParams | None = None) -> GlobalParams:
         "社内為替 (円/USD)", value=d.internal_rate, step=1.0, format="%.1f",
         key="sp_internal",
     )
+    if internal_rate <= 0:
+        _sidebar_hint("社内為替を入力してください")
     current_rate = st.sidebar.number_input(
         "現行為替 (円/USD)", value=d.current_rate, step=1.0, format="%.1f",
         key="sp_current",
     )
+    if current_rate <= 0:
+        _sidebar_hint("現行為替を入力してください")
     overseas_freight = st.sidebar.number_input(
         "海外運賃 (USD/コンテナ)", value=d.overseas_freight_usd, step=10.0, format="%.0f",
         key="sp_freight",
     )
+    if overseas_freight <= 0:
+        _sidebar_hint("海外運賃を入力してください")
 
     st.sidebar.subheader("通貨換算")
     cny_usd = st.sidebar.number_input(
         "元→ドル換算率", value=d.cny_to_usd_rate, step=0.01, format="%.2f",
         key="sp_cny_usd",
     )
+    if cny_usd <= 0:
+        _sidebar_hint("換算率を入力してください")
     cny_jpy = st.sidebar.number_input(
         "元→円為替", value=d.cny_to_jpy_rate, step=0.5, format="%.1f",
         key="sp_cny_jpy",
     )
+    if cny_jpy <= 0:
+        _sidebar_hint("換算率を入力してください")
 
     st.sidebar.subheader("率")
     insurance = st.sidebar.number_input(

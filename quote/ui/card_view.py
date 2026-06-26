@@ -42,6 +42,15 @@ def _profit_color(rate: float) -> str:
     return "#D93025"
 
 
+def _hint(msg: str) -> None:
+    """未入力・未選択項目の注記を表示."""
+    st.markdown(
+        f'<p style="color:#E37400;font-size:0.75rem;margin:-10px 0 8px 2px;">'
+        f'⚠ {msg}</p>',
+        unsafe_allow_html=True,
+    )
+
+
 def _render_kpi_card(label: str, value: str, sub: str = "", color: str = "") -> str:
     color_style = f"color:{color};" if color else ""
     sub_html = f'<div style="font-size:0.75rem;color:#666;margin-top:2px;">{sub}</div>' if sub else ""
@@ -100,16 +109,26 @@ def _render_product_card(idx: int) -> ProductInput | None:
     s1, s2, s3, s4 = st.columns(4)
     with s1:
         item_type = st.selectbox("アイテム", ITEM_TYPES, key=_key(idx, "item"))
+        if not item_type:
+            _hint("アイテムを選択してください")
     with s2:
         size = st.text_input("サイズ(cm)", key=_key(idx, "size"), placeholder="13*9.5*0.6")
+        if not size:
+            _hint("サイズを入力してください")
     with s3:
         fabric = st.selectbox("生地質", FABRIC_QUALITIES, key=_key(idx, "fabric"))
+        if not fabric:
+            _hint("生地質を選択してください")
     with s4:
         pack_size = st.selectbox("梱包サイズ", PACKING_SIZES, key=_key(idx, "pksize"))
+        if not pack_size:
+            _hint("梱包サイズを選択してください")
 
     s5, s6, s7, s8 = st.columns(4)
     with s5:
         weight = st.number_input("重量(g)", key=_key(idx, "wt"), value=0.0, format="%.1f")
+        if weight <= 0:
+            _hint("重量を入力してください")
     with s6:
         momme = weight / 3.75 if weight > 0 else 0.0
         st.metric("仕上目方(匁)", f"{momme:.1f}")
@@ -117,10 +136,14 @@ def _render_product_card(idx: int) -> ProductInput | None:
         packing = st.number_input("入数", key=_key(idx, "pk"), value=1, min_value=1)
     with s8:
         load = st.number_input("積載量", key=_key(idx, "ld"), value=0.0, format="%.0f")
+        if load <= 0:
+            _hint("積載量を入力してください（運賃計算に必須）")
 
     f1, f2, f3 = st.columns(3)
     with f1:
         fob = st.number_input("FOB(USD)", key=_key(idx, "fob"), value=0.0, format="%.3f")
+        if fob <= 0:
+            _hint("FOBを入力してください（原価計算に必須）")
     with f2:
         oproc = st.number_input("加工賃(USD)", key=_key(idx, "op"), value=0.0, format="%.2f")
     with f3:
@@ -136,12 +159,18 @@ def _render_product_card(idx: int) -> ProductInput | None:
     p1, p2, p3, p4 = st.columns(4)
     with p1:
         qp = st.number_input("見積売価(円)", key=_key(idx, "qp"), value=0.0, format="%.0f")
+        if qp <= 0:
+            _hint("見積売価を入力してください")
     with p2:
         lot = st.number_input("ロット/色", key=_key(idx, "lot"), value=0, min_value=0)
+        if lot <= 0:
+            _hint("ロットを入力してください")
     with p3:
         colors = st.number_input("配色", key=_key(idx, "col"), value=1, min_value=1)
     with p4:
         retail = st.number_input("上代(円)", key=_key(idx, "ret"), value=0.0, format="%.0f")
+        if retail <= 0:
+            _hint("上代を入力してください（定価率の計算に必要）")
 
     # 詳細（折りたたみ）
     with st.expander("日本送付副資材経費/枚（BH-BT列）"):

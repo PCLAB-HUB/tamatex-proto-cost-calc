@@ -1,4 +1,4 @@
-"""ステーショナリー見積もりソフト — Streamlit アプリケーション."""
+"""原価計算書見積もり（プロト） — Streamlit アプリケーション."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from quote.ui.page_result import render_result_page
 from quote.ui.sidebar import render_sidebar
 
 st.set_page_config(
-    page_title="ステーショナリー見積もりソフト",
+    page_title="原価計算書見積もり（プロト）",
     page_icon="📝",
     layout="wide",
 )
@@ -44,7 +44,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.title("📝 ステーショナリー見積もりソフト")
+st.title("📝 原価計算書見積もり（プロト）")
 st.caption("原価計算書参考資料.xlsx ベースのプロトタイプ")
 
 params = render_sidebar()

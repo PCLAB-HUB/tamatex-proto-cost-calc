@@ -1,4 +1,4 @@
-# Progress Log: ステーショナリー見積もりソフト
+# Progress Log: 原価計算書見積もり（プロト）
 
 ## Session 1: 2026-06-26 — 計画策定
 
