@@ -1,4 +1,4 @@
-"""ステーショナリー見積もりソフト — カード+ダッシュボード型."""
+"""ステーショナリー見積もりソフト — 3階層ナビゲーション."""
 
 from __future__ import annotations
 
@@ -14,8 +14,9 @@ from quote.storage.db import (
     save_quote,
 )
 from quote.storage.settings import load_default_params
-from quote.ui.card_view import render_card_view
+from quote.ui.page_detail import render_detail_page
 from quote.ui.page_list import render_list_page
+from quote.ui.page_product import render_product_page
 from quote.ui.page_settings import render_settings_page
 from quote.ui.sidebar import render_sidebar
 
@@ -33,63 +34,53 @@ st.markdown(
     .stApp { background-color: #F8F9FA; }
     [data-testid="stSidebar"] { background-color: #FFFFFF; border-right: 1px solid #E8EAED; }
     [data-testid="stMetricValue"] { font-size: 1.3rem; }
-    [data-testid="stExpander"] {
-        background-color: #FFFFFF;
-        border: 1px solid #E8EAED;
-        border-radius: 8px;
-    }
     button[data-testid="stNumberInputStepUp"],
-    button[data-testid="stNumberInputStepDown"] {
-        opacity: 0.4;
-    }
+    button[data-testid="stNumberInputStepDown"] { opacity: 0.4; }
     button[data-testid="stNumberInputStepUp"]:hover,
-    button[data-testid="stNumberInputStepDown"]:hover {
-        opacity: 1;
-    }
+    button[data-testid="stNumberInputStepDown"]:hover { opacity: 1; }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-# --- ページルーティング ---
 if "page" not in st.session_state:
     st.session_state.page = "list"
 
 page = st.session_state.page
 
-# --- サイドバー: 共通パラメータ + ナビゲーション ---
+
+def _clear_form_state() -> None:
+    for k in list(st.session_state.keys()):
+        if k.startswith("sp_") or k.startswith("card_"):
+            del st.session_state[k]
+    st.session_state.pop("edit_loaded", None)
+    st.session_state.pop("product_index", None)
+
+
+# --- サイドバー ---
 with st.sidebar:
     st.markdown("### ナビゲーション")
     if st.button("📋 見積もり一覧", use_container_width=True):
         st.session_state.page = "list"
-        st.session_state.pop("edit_loaded", None)
-        for k in list(st.session_state.keys()):
-            if k.startswith("sp_") or k.startswith("card_"):
-                del st.session_state[k]
+        _clear_form_state()
         st.rerun()
     if st.button("＋ 新規見積もり", use_container_width=True):
         st.session_state.page = "new"
-        st.session_state.pop("edit_quote_id", None)
-        st.session_state.pop("edit_loaded", None)
-        for k in list(st.session_state.keys()):
-            if k.startswith("sp_") or k.startswith("card_"):
-                del st.session_state[k]
+        _clear_form_state()
         st.rerun()
     if st.button("⚙️ デフォルト設定", use_container_width=True):
         st.session_state.page = "settings"
-        for k in list(st.session_state.keys()):
-            if k.startswith("sp_") or k.startswith("card_"):
-                del st.session_state[k]
+        _clear_form_state()
         st.rerun()
     st.markdown("---")
 
-# パラメータの決定: 編集時=保存済み値、新規時=デフォルト設定
+# パラメータ決定
 _initial_params = None
-if page == "edit" and "edit_quote_id" in st.session_state:
+if page in ("detail", "product") and "edit_quote_id" in st.session_state:
     _q = get_quote(st.session_state.edit_quote_id)
     if _q and "params" in _q:
         from dataclasses import fields as dc_fields
-        _p = _q["params"]
+        _p = dict(_q["params"])
         _ce_data = _p.pop("container_expenses", {})
         _ce = ContainerExpenses(**{
             f.name: _ce_data.get(f.name, f.default)
@@ -104,7 +95,7 @@ if page == "edit" and "edit_quote_id" in st.session_state:
 elif page == "new":
     _initial_params = load_default_params()
 
-if page != "settings":
+if page not in ("settings", "list"):
     params = render_sidebar(initial=_initial_params)
 else:
     params = _initial_params or GlobalParams()
@@ -116,175 +107,140 @@ st.markdown(
 )
 
 # =======================================================================
-# デフォルト設定
+# 設定
 # =======================================================================
 if page == "settings":
     render_settings_page()
 
 # =======================================================================
-# 見積もり一覧
+# ① 見積もり一覧
 # =======================================================================
 elif page == "list":
     render_list_page()
 
 # =======================================================================
-# 新規作成 / 編集
+# ② 見積もり明細
 # =======================================================================
-elif page in ("new", "edit"):
-    editing_quote = None
-    if page == "edit" and "edit_quote_id" in st.session_state:
-        editing_quote = get_quote(st.session_state.edit_quote_id)
+elif page == "detail":
+    if "edit_quote_id" in st.session_state:
+        render_detail_page(st.session_state.edit_quote_id, params)
 
-    if editing_quote:
-        st.caption(f"編集中: {editing_quote['quote_number']}")
-    else:
-        st.caption("新規見積もり作成")
+# =======================================================================
+# ③ 商品計算シート
+# =======================================================================
+elif page == "product":
+    if "edit_quote_id" in st.session_state:
+        idx = st.session_state.get("product_index", -1)
+        render_product_page(st.session_state.edit_quote_id, idx, params)
 
-    # 見積もり情報ヘッダー
+# =======================================================================
+# 新規作成（ヘッダー入力 → 保存 → 明細へ）
+# =======================================================================
+elif page == "new":
+    st.caption("新規見積もり作成")
     with st.container(border=True):
         st.markdown("##### 見積もり情報")
         h1, h2, h3 = st.columns(3)
         customers = list_customers()
         staff = list_staff()
-
         cust_names = [c["name"] for c in customers]
         staff_names = [s["name"] for s in staff]
 
-        default_cust_idx = 0
-        default_staff_idx = 0
-        default_title = ""
-        default_notes = ""
-
-        if editing_quote:
-            for i, c in enumerate(customers):
-                if c["id"] == editing_quote.get("customer_id"):
-                    default_cust_idx = i
-                    break
-            for i, s in enumerate(staff):
-                if s["id"] == editing_quote.get("staff_id"):
-                    default_staff_idx = i
-                    break
-            default_title = editing_quote.get("title") or ""
-            default_notes = editing_quote.get("notes") or ""
-
         with h1:
-            selected_customer = st.selectbox(
-                "顧客 *",
-                cust_names,
-                index=default_cust_idx,
-                key="quote_customer",
-            )
+            sel_cust = st.selectbox("顧客 *", cust_names, key="new_customer")
         with h2:
-            selected_staff = st.selectbox(
-                "担当者 *",
-                staff_names,
-                index=default_staff_idx,
-                key="quote_staff",
-            )
+            sel_staff = st.selectbox("担当者 *", staff_names, key="new_staff")
         with h3:
-            quote_title = st.text_input(
-                "見積もりタイトル",
-                value=default_title,
-                key="quote_title",
+            title = st.text_input(
+                "見積もりタイトル", key="new_title",
                 placeholder="例: 2026年秋冬カタログ用",
             )
-
-        quote_notes = st.text_area(
-            "備考",
-            value=default_notes,
-            key="quote_notes",
-            height=68,
+        notes = st.text_area(
+            "備考", key="new_notes", height=68,
             placeholder="社内メモ（顧客には表示されません）",
         )
 
-    # 保存済み商品をフォームに流し込む（初回のみ）
-    if editing_quote and "edit_loaded" not in st.session_state:
-        items = editing_quote.get("items", [])
-        st.session_state["card_num_products"] = max(len(items), 1)
-        _tariff_reverse = {v: k for k, v in TARIFF_RATES.items()}
-        for i, item in enumerate(items):
-            _prefix = f"card_{i}"
-            st.session_state[f"{_prefix}_name"] = item.get("product_name", "")
-            st.session_state[f"{_prefix}_code"] = str(item.get("prototype_code", ""))
-            st.session_state[f"{_prefix}_size"] = item.get("package_size_cm", "")
-            _tariff_val = float(item.get("tariff_rate_override") or 0)
-            st.session_state[f"{_prefix}_tariff"] = _tariff_reverse.get(
-                _tariff_val, "非課税"
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("作成して明細へ進む →", type="primary", use_container_width=True):
+            cust_id = customers[cust_names.index(sel_cust)]["id"]
+            staff_id = staff[staff_names.index(sel_staff)]["id"]
+            new_id = save_quote(
+                customer_id=cust_id,
+                staff_id=staff_id,
+                title=title,
+                products=[],
+                params=params,
+                notes=notes,
             )
-            st.session_state[f"{_prefix}_wt"] = float(item.get("weight_g", 0))
-            st.session_state[f"{_prefix}_pk"] = int(item.get("packing_quantity", 1))
-            st.session_state[f"{_prefix}_ld"] = float(item.get("container_load", 0))
-            st.session_state[f"{_prefix}_fob"] = float(item.get("fob_usd", 0))
-            st.session_state[f"{_prefix}_op"] = float(item.get("other_processing_usd", 0))
-            st.session_state[f"{_prefix}_loss"] = float(item.get("loss_rate", 0))
-            st.session_state[f"{_prefix}_qp"] = float(item.get("quote_price", 0))
-            st.session_state[f"{_prefix}_lot"] = int(item.get("lot_per_color", 0))
-            st.session_state[f"{_prefix}_col"] = int(item.get("num_colors", 1))
-            st.session_state[f"{_prefix}_ret"] = float(item.get("retail_price", 0))
-            st.session_state[f"{_prefix}_ribbon"] = float(item.get("ribbon", 0))
-            st.session_state[f"{_prefix}_nl2"] = float(item.get("name_label_2", 0))
-            st.session_state[f"{_prefix}_nl3"] = float(item.get("name_label_3", 0))
-            st.session_state[f"{_prefix}_seal1"] = float(item.get("seal_1", 0))
-            st.session_state[f"{_prefix}_seal2"] = float(item.get("seal_2", 0))
-            st.session_state[f"{_prefix}_tag"] = float(item.get("tag", 0))
-            st.session_state[f"{_prefix}_bag"] = float(item.get("bag", 0))
-            st.session_state[f"{_prefix}_omat"] = float(item.get("other_material", 0))
-            st.session_state[f"{_prefix}_matfr"] = float(item.get("material_freight", 0))
-            st.session_state[f"{_prefix}_design"] = float(item.get("design_cost", 0))
-            st.session_state[f"{_prefix}_jqc"] = float(item.get("jq_card", 0))
-            st.session_state[f"{_prefix}_embc"] = float(item.get("embroidery_card", 0))
-            st.session_state[f"{_prefix}_prup"] = float(item.get("print_unit_price", 0))
-            st.session_state[f"{_prefix}_prcnt"] = float(item.get("print_type_count", 0))
-            st.session_state[f"{_prefix}_layout"] = float(item.get("layout", 0))
-            st.session_state[f"{_prefix}_namepl"] = float(item.get("name_plate", 0))
-            st.session_state[f"{_prefix}_sealpl"] = float(item.get("seal_plate", 0))
-            st.session_state[f"{_prefix}_tabpl"] = float(item.get("tab_plate", 0))
-            st.session_state[f"{_prefix}_bagpl"] = float(item.get("bag_plate", 0))
-            st.session_state[f"{_prefix}_cbpl"] = float(item.get("cardboard_plate", 0))
-            st.session_state[f"{_prefix}_odep"] = float(item.get("other_depreciation", 0))
-            st.session_state[f"{_prefix}_sample"] = float(item.get("sample_cost", 0))
-            st.session_state[f"{_prefix}_qinsp"] = float(item.get("quality_inspection", 0))
-            st.session_state[f"{_prefix}_oamort"] = float(item.get("other_amortization", 0))
-            st.session_state[f"{_prefix}_lcb"] = float(item.get("logistics_cardboard", 0))
-            st.session_state[f"{_prefix}_lio"] = float(item.get("logistics_io_fee", 70))
-            st.session_state[f"{_prefix}_lsl"] = float(item.get("logistics_slip_fee", 100))
-            st.session_state[f"{_prefix}_lm"] = float(item.get("logistics_storage_months", 1))
-            st.session_state[f"{_prefix}_lf"] = float(item.get("logistics_storage_fee", 150))
-            st.session_state[f"{_prefix}_lr"] = float(item.get("logistics_freight", 700))
-            st.session_state[f"{_prefix}_cf"] = float(item.get("center_fee", 0))
-            st.session_state[f"{_prefix}_rebate"] = float(item.get("rebate", 0))
-        st.session_state["edit_loaded"] = True
-        st.rerun()
-
-    st.markdown("---")
-
-    # 商品入力
-    products, results = render_card_view(params)
-
-    # 保存ボタン
-    st.markdown("---")
-    save_col1, save_col2, save_col3 = st.columns([2, 2, 4])
-    with save_col1:
-        if st.button("💾 保存", type="primary", use_container_width=True):
-            if not products:
-                st.error("商品を1つ以上入力してください。")
-            else:
-                cust_id = customers[cust_names.index(selected_customer)]["id"]
-                staff_id = staff[staff_names.index(selected_staff)]["id"]
-                qid = editing_quote["id"] if editing_quote else None
-                saved_id = save_quote(
-                    customer_id=cust_id,
-                    staff_id=staff_id,
-                    title=quote_title,
-                    products=products,
-                    params=params,
-                    notes=quote_notes,
-                    quote_id=qid,
-                )
-                st.success(f"保存しました (ID: {saved_id})")
-                st.session_state.page = "list"
-                st.rerun()
-    with save_col2:
-        if st.button("← 一覧に戻る", use_container_width=True):
+            st.session_state.page = "detail"
+            st.session_state.edit_quote_id = new_id
+            _clear_form_state()
+            st.rerun()
+    with c2:
+        if st.button("← キャンセル", use_container_width=True):
             st.session_state.page = "list"
             st.rerun()
+
+# =======================================================================
+# 見積もりヘッダー編集
+# =======================================================================
+elif page == "edit_header":
+    quote = get_quote(st.session_state.get("edit_quote_id", 0))
+    if not quote:
+        st.error("見積もりが見つかりません。")
+    else:
+        st.caption(f"編集中: {quote['quote_number']}")
+        with st.container(border=True):
+            st.markdown("##### 見積もり情報")
+            customers = list_customers()
+            staff = list_staff()
+            cust_names = [c["name"] for c in customers]
+            staff_names = [s["name"] for s in staff]
+
+            ci = next(
+                (i for i, c in enumerate(customers)
+                 if c["id"] == quote.get("customer_id")), 0
+            )
+            si = next(
+                (i for i, s in enumerate(staff)
+                 if s["id"] == quote.get("staff_id")), 0
+            )
+
+            h1, h2, h3 = st.columns(3)
+            with h1:
+                sel_cust = st.selectbox("顧客 *", cust_names, index=ci, key="eh_cust")
+            with h2:
+                sel_staff = st.selectbox("担当者 *", staff_names, index=si, key="eh_staff")
+            with h3:
+                title = st.text_input(
+                    "タイトル", value=quote.get("title") or "", key="eh_title"
+                )
+            notes = st.text_area(
+                "備考", value=quote.get("notes") or "", key="eh_notes", height=68
+            )
+
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("💾 保存して明細に戻る", type="primary", use_container_width=True):
+                from dataclasses import fields as dc_fields
+                all_products = []
+                valid_fields = {f.name for f in dc_fields(ProductInput)}
+                for item in quote.get("items", []):
+                    filtered = {k: v for k, v in item.items() if k in valid_fields}
+                    all_products.append(ProductInput(**filtered))
+                save_quote(
+                    customer_id=customers[cust_names.index(sel_cust)]["id"],
+                    staff_id=staff[staff_names.index(sel_staff)]["id"],
+                    title=title,
+                    products=all_products,
+                    params=params,
+                    notes=notes,
+                    quote_id=quote["id"],
+                )
+                st.session_state.page = "detail"
+                st.rerun()
+        with c2:
+            if st.button("← 戻る（保存しない）", use_container_width=True):
+                st.session_state.page = "detail"
+                st.rerun()

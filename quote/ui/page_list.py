@@ -66,8 +66,11 @@ def render_list_page() -> None:
                 )
             with c4:
                 if st.button("開く", key=f"open_{q['id']}", use_container_width=True):
-                    st.session_state.page = "edit"
+                    st.session_state.page = "detail"
                     st.session_state.edit_quote_id = q["id"]
+                    for k in list(st.session_state.keys()):
+                        if k.startswith("sp_") or k.startswith("card_"):
+                            del st.session_state[k]
                     st.rerun()
             with c5:
                 if st.button("🗑", key=f"del_{q['id']}"):
