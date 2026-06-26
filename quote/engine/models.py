@@ -221,3 +221,4 @@ class QuoteResult:
     pricing_with_amort: PricingResult
     pricing_without_amort: PricingResult
     amortization_separate: float = 0.0
+    warnings: tuple[str, ...] = ()

@@ -269,6 +269,9 @@ def render_card_view(
                 all_products.append(product)
                 result = calculate(product, params)
                 all_results.append((product.product_name, result))
+                if result.warnings:
+                    for w in result.warnings:
+                        st.warning(w)
                 st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
                 _render_result_card(product.product_name, result)
 

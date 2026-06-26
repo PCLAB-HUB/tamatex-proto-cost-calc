@@ -279,10 +279,41 @@ def calc_pricing(
     )
 
 
+def _validate(product: ProductInput, lot: int) -> list[str]:
+    """入力値のバリデーション。警告メッセージのリストを返す."""
+    warnings: list[str] = []
+
+    if product.container_load <= 0:
+        warnings.append(
+            "コンテナ積載量が未設定です。海外運賃・コンテナ経費が原価に含まれません。"
+        )
+
+    has_per_lot_costs = (
+        product.die_charge > 0
+        or product.design_cost > 0
+        or product.jq_card > 0
+        or product.embroidery_card > 0
+        or product.print_unit_price > 0
+    )
+    if lot <= 0 and has_per_lot_costs:
+        warnings.append(
+            "ロットが0ですが型代・償却経費が入力されています。"
+            "これらのコストは原価に含まれません。"
+        )
+
+    if product.center_fee + product.rebate >= 1.0:
+        warnings.append(
+            "センターフィー＋歩引率が100%以上です。歩積込売価を計算できません。"
+        )
+
+    return warnings
+
+
 def calculate(product: ProductInput, params: GlobalParams) -> QuoteResult:
     """商品1点の見積もり計算を実行する（メインAPI）."""
     tariff_rate = _effective_tariff(product, params)
     lot = product.lot_per_color * product.num_colors
+    warnings = _validate(product, lot)
 
     # --- 原価積み上げ ---
     fob_adj = calc_fob_adjusted(product, lot)
@@ -367,4 +398,5 @@ def calculate(product: ProductInput, params: GlobalParams) -> QuoteResult:
         pricing_with_amort=pricing_with,
         pricing_without_amort=pricing_without,
         amortization_separate=amort_separate,
+        warnings=tuple(warnings),
     )

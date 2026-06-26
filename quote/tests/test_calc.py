@@ -168,6 +168,41 @@ class TestRow9Formulas:
         assert result == 64
 
 
+class TestValidation:
+    """Codex指摘: 入力バリデーション警告のテスト."""
+
+    def test_zero_lot_with_die_charge_warns(self) -> None:
+        product = ProductInput(
+            product_name="test", fob_usd=0.5, die_charge=1000.0,
+            lot_per_color=0, container_load=100000.0,
+        )
+        result = calculate(product, GlobalParams())
+        assert any("ロットが0" in w for w in result.warnings)
+
+    def test_zero_container_load_warns(self) -> None:
+        product = ProductInput(
+            product_name="test", fob_usd=0.5,
+            container_load=0.0, lot_per_color=1000,
+        )
+        result = calculate(product, GlobalParams())
+        assert any("積載量" in w for w in result.warnings)
+
+    def test_fee_over_100_pct_warns(self) -> None:
+        product = ProductInput(
+            product_name="test", fob_usd=0.5,
+            container_load=100000.0, lot_per_color=1000,
+            center_fee=0.6, rebate=0.5,
+        )
+        result = calculate(product, GlobalParams())
+        assert any("100%以上" in w for w in result.warnings)
+
+    def test_valid_input_no_warnings(
+        self, row9_product: ProductInput, row9_params: GlobalParams
+    ) -> None:
+        result = calculate(row9_product, row9_params)
+        assert result.warnings == ()
+
+
 class TestSubMaterialLossRate:
     """副資材ロス率(BS列)がFOBロス率(U列)と混同されないことを検証."""
 

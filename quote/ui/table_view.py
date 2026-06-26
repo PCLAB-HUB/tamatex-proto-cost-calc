@@ -141,6 +141,8 @@ def render_table_view(params: GlobalParams) -> None:
         if product is None:
             continue
         result = calculate(product, params)
+        for w in result.warnings:
+            st.warning(f"{product.product_name}: {w}")
         r = result.pricing_with_amort
         results_data.append(
             {
