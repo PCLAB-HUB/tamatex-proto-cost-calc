@@ -120,12 +120,15 @@ def calc_b_grade_loss(
     return (purchase_price + container_expense_unit) * loss_rate
 
 
-def calc_sub_material_cost(product: ProductInput, tariff_rate: float) -> float:
+def calc_sub_material_cost(
+    product: ProductInput, tariff_rate: float, sub_material_loss_rate: float
+) -> float:
     """BT列: 副資材経費.
 
     BQ = SUM(BH:BP)
     BR = AP (関税率)
     BT = BQ * (1+BR) * (1+BS)
+    BS = 副資材ロス率（U列のFOBロス率とは別）
     """
     total = (
         product.ribbon
@@ -138,7 +141,7 @@ def calc_sub_material_cost(product: ProductInput, tariff_rate: float) -> float:
         + product.other_material
         + product.material_freight
     )
-    return total * (1 + tariff_rate) * (1 + product.loss_rate)
+    return total * (1 + tariff_rate) * (1 + sub_material_loss_rate)
 
 
 def calc_amortization_per_unit(product: ProductInput, lot: int) -> float:
@@ -155,7 +158,6 @@ def calc_amortization_per_unit(product: ProductInput, lot: int) -> float:
         + product.jq_card
         + product.embroidery_card
         + print_cost
-        + product.print_mold
         + product.layout
         + product.name_plate
         + product.seal_plate
@@ -294,7 +296,9 @@ def calculate(product: ProductInput, params: GlobalParams) -> QuoteResult:
 
     b_loss = calc_b_grade_loss(purchase, ct_unit, params.b_grade_loss_rate)
 
-    sub_mat = calc_sub_material_cost(product, tariff_rate)
+    sub_mat = calc_sub_material_cost(
+        product, tariff_rate, params.sub_material_loss_rate
+    )
 
     amort_actual = calc_amortization_per_unit(product, lot)
     amort_margin = calc_amortization_with_margin(

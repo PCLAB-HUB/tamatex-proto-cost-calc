@@ -69,7 +69,6 @@ class ProductInput:
     embroidery_card: float = 0.0
     print_unit_price: float = 0.0
     print_type_count: float = 0.0
-    print_mold: float = 0.0
     layout: float = 0.0
     name_plate: float = 0.0
     seal_plate: float = 0.0

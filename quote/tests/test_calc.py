@@ -129,7 +129,9 @@ class TestRow9Formulas:
 
     def test_sub_material_zero(self, row9_product: ProductInput) -> None:
         """BT9 = 0 (副資材すべて0)."""
-        result = calc_sub_material_cost(row9_product, tariff_rate=0.0)
+        result = calc_sub_material_cost(
+            row9_product, tariff_rate=0.0, sub_material_loss_rate=0.05
+        )
         assert result == 0.0
 
     def test_logistics_per_case(self, row9_product: ProductInput) -> None:
@@ -164,6 +166,68 @@ class TestRow9Formulas:
         """DG9 = 64 = ROUNDUP(52.638 * 1.2)."""
         result = calc_trial_price(52.638, 0.20)
         assert result == 64
+
+
+class TestSubMaterialLossRate:
+    """副資材ロス率(BS列)がFOBロス率(U列)と混同されないことを検証."""
+
+    def test_sub_material_with_values(self) -> None:
+        """副資材に値がある場合、BS=0.05が適用される."""
+        product = ProductInput(ribbon=10.0, tag=5.0)
+        result = calc_sub_material_cost(
+            product, tariff_rate=0.08, sub_material_loss_rate=0.05
+        )
+        expected = (10.0 + 5.0) * (1 + 0.08) * (1 + 0.05)
+        assert result == pytest.approx(expected, abs=0.01)
+
+    def test_sub_material_uses_correct_rate(self) -> None:
+        """product.loss_rate(U列)ではなくsub_material_loss_rate(BS列)を使う."""
+        product = ProductInput(ribbon=100.0, loss_rate=0.0)
+        with_correct = calc_sub_material_cost(product, 0.0, sub_material_loss_rate=0.05)
+        assert with_correct == pytest.approx(105.0, abs=0.01)
+
+
+class TestRow10EndToEnd:
+    """Excel Row 10 (PVCバッグ, 関税8%) の一気通貫検証."""
+
+    def test_full_calculation(self) -> None:
+        product = ProductInput(
+            product_name="PVCバッグ+メモカード",
+            fob_usd=0.20,
+            embroidery_per_1000=0.03,
+            packing_quantity=640,
+            container_load=251354.6285093442,
+            tariff_rate_override=0.08,
+            quote_price=44.0,
+            lot_per_color=10000,
+            num_colors=1,
+            retail_price=500.0,
+            logistics_io_fee=70.0,
+            logistics_storage_months=1.0,
+            logistics_storage_fee=150.0,
+            logistics_slip_fee=100.0,
+            logistics_freight=1170.0,
+        )
+        params = GlobalParams(
+            internal_rate=152.0,
+            current_rate=152.0,
+            overseas_freight_usd=240.0,
+            cny_to_usd_rate=0.17,
+            cny_to_jpy_rate=13.0,
+            insurance_risk_rate=0.0018,
+            tariff_rate=0.08,
+            b_grade_loss_rate=0.01,
+            sub_material_loss_rate=0.05,
+            amortization_margin=0.05,
+            margin=0.20,
+        )
+        result = calculate(product, params)
+
+        assert result.cost.purchase_price == pytest.approx(33.048, abs=0.01)
+        assert result.cost.product_cost == pytest.approx(36.475, abs=0.1)
+        assert result.pricing_with_amort.trial_price == 44
+        assert result.pricing_with_amort.gross_profit_unit == pytest.approx(7.525, abs=0.1)
+        assert result.pricing_with_amort.gross_profit_rate == pytest.approx(0.171, abs=0.005)
 
 
 class TestRow9EndToEnd:
