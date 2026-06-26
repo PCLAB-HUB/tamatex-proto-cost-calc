@@ -59,10 +59,12 @@ with st.sidebar:
     st.markdown("### ナビゲーション")
     if st.button("📋 見積もり一覧", use_container_width=True):
         st.session_state.page = "list"
+        st.session_state.pop("edit_loaded", None)
         st.rerun()
     if st.button("＋ 新規見積もり", use_container_width=True):
         st.session_state.page = "new"
         st.session_state.pop("edit_quote_id", None)
+        st.session_state.pop("edit_loaded", None)
         st.rerun()
     st.markdown("---")
 
@@ -149,6 +151,34 @@ elif page in ("new", "edit"):
             height=68,
             placeholder="社内メモ（顧客には表示されません）",
         )
+
+    # 保存済み商品をフォームに流し込む（初回のみ）
+    if editing_quote and "edit_loaded" not in st.session_state:
+        items = editing_quote.get("items", [])
+        st.session_state["card_num_products"] = max(len(items), 1)
+        for i, item in enumerate(items):
+            _prefix = f"card_{i}"
+            st.session_state[f"{_prefix}_name"] = item.get("product_name", "")
+            st.session_state[f"{_prefix}_code"] = str(item.get("prototype_code", ""))
+            st.session_state[f"{_prefix}_size"] = item.get("package_size_cm", "")
+            st.session_state[f"{_prefix}_wt"] = float(item.get("weight_g", 0))
+            st.session_state[f"{_prefix}_pk"] = int(item.get("packing_quantity", 1))
+            st.session_state[f"{_prefix}_ld"] = float(item.get("container_load", 0))
+            st.session_state[f"{_prefix}_fob"] = float(item.get("fob_usd", 0))
+            st.session_state[f"{_prefix}_op"] = float(item.get("other_processing_usd", 0))
+            st.session_state[f"{_prefix}_loss"] = float(item.get("loss_rate", 0))
+            st.session_state[f"{_prefix}_qp"] = float(item.get("quote_price", 0))
+            st.session_state[f"{_prefix}_lot"] = int(item.get("lot_per_color", 0))
+            st.session_state[f"{_prefix}_col"] = int(item.get("num_colors", 1))
+            st.session_state[f"{_prefix}_ret"] = float(item.get("retail_price", 0))
+            st.session_state[f"{_prefix}_lio"] = float(item.get("logistics_io_fee", 70))
+            st.session_state[f"{_prefix}_lsl"] = float(item.get("logistics_slip_fee", 100))
+            st.session_state[f"{_prefix}_lm"] = float(item.get("logistics_storage_months", 1))
+            st.session_state[f"{_prefix}_lf"] = float(item.get("logistics_storage_fee", 150))
+            st.session_state[f"{_prefix}_lr"] = float(item.get("logistics_freight", 700))
+            st.session_state[f"{_prefix}_cf"] = float(item.get("center_fee", 0))
+        st.session_state["edit_loaded"] = True
+        st.rerun()
 
     st.markdown("---")
 
