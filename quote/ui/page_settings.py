@@ -12,7 +12,7 @@ _BUILTIN = GlobalParams()
 
 def render_settings_page() -> None:
     """デフォルト設定の編集・保存ページ."""
-    st.markdown("### ⚙️ デフォルト設定")
+    st.markdown("### ⚙️ パラメータ設定")
     st.caption(
         "新規見積もり作成時に自動適用されるパラメータです。"
         "見積もりごとに個別変更も可能です。"
@@ -100,7 +100,7 @@ def render_settings_page() -> None:
             devanning = st.number_input("デバン料", value=ce.devanning, format="%.0f", key="ds_devanning")
 
     st.markdown("")
-    if st.button("💾 デフォルト設定を保存", type="primary"):
+    if st.button("💾 パラメータ設定を保存", type="primary"):
         new_params = GlobalParams(
             internal_rate=internal,
             current_rate=current,
@@ -121,4 +121,4 @@ def render_settings_page() -> None:
             ),
         )
         save_default_params(new_params)
-        st.success("デフォルト設定を保存しました。新規見積もり作成時に自動適用されます。")
+        st.success("パラメータ設定を保存しました。新規見積もり作成時に自動適用されます。")

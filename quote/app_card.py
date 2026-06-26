@@ -138,7 +138,7 @@ with st.sidebar:
         st.session_state.page = "new"
         _clear_form_state()
         st.rerun()
-    if st.button("⚙️ デフォルト設定", use_container_width=True):
+    if st.button("⚙️ パラメータ設定", use_container_width=True):
         st.session_state.page = "settings"
         _clear_form_state()
         st.rerun()
