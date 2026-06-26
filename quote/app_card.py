@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+from quote.data.defaults import TARIFF_RATES
 from quote.data.mock_data import seed_mock_data
 from quote.engine.models import GlobalParams, ProductInput
 from quote.storage.db import (
@@ -156,11 +157,16 @@ elif page in ("new", "edit"):
     if editing_quote and "edit_loaded" not in st.session_state:
         items = editing_quote.get("items", [])
         st.session_state["card_num_products"] = max(len(items), 1)
+        _tariff_reverse = {v: k for k, v in TARIFF_RATES.items()}
         for i, item in enumerate(items):
             _prefix = f"card_{i}"
             st.session_state[f"{_prefix}_name"] = item.get("product_name", "")
             st.session_state[f"{_prefix}_code"] = str(item.get("prototype_code", ""))
             st.session_state[f"{_prefix}_size"] = item.get("package_size_cm", "")
+            _tariff_val = float(item.get("tariff_rate_override") or 0)
+            st.session_state[f"{_prefix}_tariff"] = _tariff_reverse.get(
+                _tariff_val, "非課税"
+            )
             st.session_state[f"{_prefix}_wt"] = float(item.get("weight_g", 0))
             st.session_state[f"{_prefix}_pk"] = int(item.get("packing_quantity", 1))
             st.session_state[f"{_prefix}_ld"] = float(item.get("container_load", 0))
