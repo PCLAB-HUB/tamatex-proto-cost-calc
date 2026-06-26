@@ -43,12 +43,30 @@ def render_product_page(
                 if sk:
                     st.session_state[sk] = _convert_value(k, v)
 
-            from quote.data.defaults import TARIFF_RATES
+            from quote.data.defaults import (
+                CONTAINER_FT, DELIVERY_TO, FABRIC_QUALITIES,
+                ITEM_TYPES, METHODS, PACKING_SIZES, PORTS,
+                SHIP_TO, SUPPLIERS, TARIFF_RATES,
+            )
             _tariff_reverse = {v: k for k, v in TARIFF_RATES.items()}
             tariff_val = float(item.get("tariff_rate_override") or 0)
             st.session_state[f"{_prefix}_tariff"] = _tariff_reverse.get(
                 tariff_val, "非課税"
             )
+
+            _selectbox_options = {
+                "sup": SUPPLIERS, "port": PORTS, "del": DELIVERY_TO,
+                "ship": SHIP_TO, "ft": CONTAINER_FT, "method": METHODS,
+                "item": ITEM_TYPES, "fabric": FABRIC_QUALITIES,
+                "pksize": PACKING_SIZES,
+            }
+            for short, options in _selectbox_options.items():
+                sk = f"{_prefix}_{short}"
+                if sk in st.session_state:
+                    val = st.session_state[sk]
+                    if val not in options:
+                        st.session_state[sk] = options[0]
+
             st.session_state[f"{_prefix}_loaded"] = True
             st.rerun()
 
@@ -173,7 +191,22 @@ _FIELD_MAP = {
     "sample_cost": "sample",
     "quality_inspection": "qinsp",
     "other_amortization": "oamort",
+    "supplier": "sup",
+    "port": "port",
+    "delivery_to": "del",
+    "ship_to": "ship",
+    "container_ft": "ft",
+    "method": "method",
+    "item_type": "item",
+    "fabric_quality": "fabric",
+    "packing_size": "pksize",
 }
+
+_STRING_FIELDS = frozenset({
+    "product_name", "prototype_code", "package_size_cm",
+    "supplier", "port", "delivery_to", "ship_to",
+    "method", "item_type", "fabric_quality", "packing_size",
+})
 
 
 def _field_to_session_key(prefix: str, field_name: str) -> str | None:
@@ -185,9 +218,11 @@ def _field_to_session_key(prefix: str, field_name: str) -> str | None:
 
 def _convert_value(field_name: str, value):
     if value is None:
-        return 0.0 if field_name not in ("product_name", "prototype_code", "package_size_cm") else ""
-    if field_name in ("product_name", "prototype_code", "package_size_cm"):
+        return "" if field_name in _STRING_FIELDS else (
+            20 if field_name == "container_ft" else 0.0
+        )
+    if field_name in _STRING_FIELDS:
         return str(value)
-    if field_name in ("packing_quantity", "lot_per_color", "num_colors"):
+    if field_name in ("packing_quantity", "lot_per_color", "num_colors", "container_ft"):
         return int(float(value))
     return float(value)

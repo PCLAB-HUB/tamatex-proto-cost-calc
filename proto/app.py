@@ -34,7 +34,7 @@ from proto.ui.section_gift import render_gifts
 from proto.ui.section_items import render_items
 from proto.ui.section_result import render_results
 from proto.ui.section_verify import render_verify
-from proto.ui.sidebar import render_sidebar
+from proto.ui.sidebar import apply_condition_to_session_state, render_sidebar
 
 
 @st.cache_resource
@@ -68,6 +68,12 @@ def main() -> None:
     st.caption("ダッシュボード型 UI — 意思決定支援版")
 
     repo = get_scenario_repo()
+
+    if "_pending_scenario_load" in st.session_state:
+        _pending = st.session_state.pop("_pending_scenario_load")
+        apply_condition_to_session_state(_pending)
+        st.toast(f"シナリオ '{_pending.name}' を読み込みました")
+
     cond = render_sidebar(repo=repo)
 
     # ダッシュボード・シナリオ向けに計算を先行実行

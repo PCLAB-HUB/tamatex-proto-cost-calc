@@ -308,7 +308,7 @@ def _render_action_buttons(
         if st.button("📂 読み込み", disabled=not single, key="btn_load"):
             try:
                 scenario = repo.get_scenario(selected[0]["id"])
-                _load_scenario_into_sidebar(scenario.condition)
+                st.session_state["_pending_scenario_load"] = scenario.condition
                 st.rerun()
             except ScenarioNotFoundError:
                 st.error(f"シナリオ (id={selected[0]['id']}) が見つかりません")
