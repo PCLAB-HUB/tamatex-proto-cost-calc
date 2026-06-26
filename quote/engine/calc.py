@@ -8,6 +8,11 @@ from __future__ import annotations
 
 import math
 
+
+def _roundup(value: float) -> float:
+    """Excel ROUNDUP(...,0) equivalent — round(10)で浮動小数点ノイズを除去してからceil."""
+    return math.ceil(round(value, 10))
+
 from quote.engine.models import (
     CostBreakdown,
     GlobalParams,
@@ -240,7 +245,7 @@ def calc_product_cost(
 
 def calc_trial_price(product_cost: float, margin: float) -> float:
     """DG列: 試算売価 = ROUNDUP(原価 * (1+マージン))."""
-    return math.ceil(product_cost * (1 + margin))
+    return _roundup(product_cost * (1 + margin))
 
 
 def calc_pricing(
@@ -379,7 +384,7 @@ def calculate(product: ProductInput, params: GlobalParams) -> QuoteResult:
     amort_separate = 0.0
     rebate_ex = product.rebate_ex_amort
     if (1 - rebate_ex) > 0:
-        amort_separate = math.ceil(
+        amort_separate = _roundup(
             amort_margin / (1 - rebate_ex)
         ) if amort_margin > 0 else 0.0
 

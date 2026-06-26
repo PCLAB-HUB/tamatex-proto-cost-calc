@@ -155,7 +155,7 @@ with st.sidebar:
 
 # パラメータ決定
 _initial_params = None
-if page in ("detail", "product") and "edit_quote_id" in st.session_state:
+if page in ("detail", "product", "edit_header") and "edit_quote_id" in st.session_state:
     _q = get_quote(st.session_state.edit_quote_id)
     if _q and "params" in _q:
         from dataclasses import fields as dc_fields

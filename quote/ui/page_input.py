@@ -79,7 +79,7 @@ def _render_product(idx: int) -> ProductInput | None:
             key=_key(idx, "load"),
             value=0.0,
             step=1000.0,
-            format="%.0f",
+            format="%.1f",
             help="Excelから転記。空欄で近似計算。",
         )
 
@@ -102,14 +102,14 @@ def _render_product(idx: int) -> ProductInput | None:
     pr1, pr2, pr3, pr4 = st.columns(4)
     with pr1:
         quote_price = st.number_input(
-            "見積売価 (円) *", key=_key(idx, "qp"), value=0.0, step=1.0, format="%.0f"
+            "見積売価 (円) *", key=_key(idx, "qp"), value=0.0, step=1.0, format="%.1f"
         )
     with pr2:
         lot = st.number_input("ロット (色あたり)", key=_key(idx, "lot"), value=0, step=1000, min_value=0)
     with pr3:
         colors = st.number_input("配色数", key=_key(idx, "col"), value=1, step=1, min_value=1)
     with pr4:
-        retail = st.number_input("上代 (円)", key=_key(idx, "retail"), value=0.0, step=10.0, format="%.0f")
+        retail = st.number_input("上代 (円)", key=_key(idx, "retail"), value=0.0, step=10.0, format="%.1f")
 
     # ── 詳細コスト（折りたたみ） ──
     with st.expander("検品・加工・副資材・物流（詳細）"):

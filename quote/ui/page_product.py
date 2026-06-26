@@ -55,7 +55,18 @@ def render_product_page(
     product = _render_product_card(0)
 
     if product is not None:
-        result = calculate(product, params)
+        if not is_new:
+            valid_fields = {f.name for f in dc_fields(ProductInput)}
+            card_managed = set(_FIELD_MAP.keys()) | {"tariff_rate_override"}
+            base = {k: v for k, v in items[product_index].items() if k in valid_fields}
+            product_dict = asdict(product)
+            for field in card_managed:
+                if field in product_dict:
+                    base[field] = product_dict[field]
+            product_for_calc = ProductInput(**base)
+        else:
+            product_for_calc = product
+        result = calculate(product_for_calc, params)
         if result.warnings:
             for w in result.warnings:
                 st.warning(w)

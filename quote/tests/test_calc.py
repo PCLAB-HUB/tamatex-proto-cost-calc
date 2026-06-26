@@ -7,6 +7,7 @@ import math
 import pytest
 
 from quote.engine.calc import (
+    _roundup,
     calc_b_grade_loss,
     calc_cif,
     calc_cnf,
@@ -293,3 +294,22 @@ class TestRow9EndToEnd:
         assert result.pricing_with_amort.gross_profit_total == pytest.approx(
             113618.0, abs=100.0
         )
+
+
+class TestRoundup:
+    """_roundup が浮動小数点ノイズを正しく処理する."""
+
+    def test_exact_boundary_no_overshoot(self) -> None:
+        assert _roundup(100.0 * 1.1) == 110
+        assert math.ceil(100.0 * 1.1) == 111  # raw ceil overshoots
+
+    def test_genuine_fraction_rounds_up(self) -> None:
+        assert _roundup(5.5 * 1.2) == 7  # 6.6 → 7
+
+    def test_exact_integer_unchanged(self) -> None:
+        assert _roundup(10.0) == 10
+
+    def test_trial_price_boundary(self) -> None:
+        # 100*1.1=110.00000000000001 in float — _roundup absorbs noise → 110
+        assert calc_trial_price(100.0, 0.10) == 110
+        assert calc_trial_price(5.5, 0.20) == 7  # 5.5*1.2=6.6 → ceil=7
