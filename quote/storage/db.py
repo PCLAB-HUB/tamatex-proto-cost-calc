@@ -14,9 +14,8 @@ DB_PATH = Path(__file__).resolve().parent.parent.parent / "quote_data.db"
 
 
 def _conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = sqlite3.connect(str(DB_PATH), isolation_level=None)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
@@ -62,15 +61,14 @@ def init_db() -> None:
         )
 
 
-def _next_quote_number() -> str:
+def _next_quote_number_seq(conn) -> str:
     year = datetime.now().year
-    with _conn() as conn:
-        row = conn.execute(
-            "SELECT MAX(CAST(SUBSTR(quote_number, 7) AS INTEGER)) "
-            "FROM quotes WHERE quote_number LIKE ?",
-            (f"Q-{year}-%",),
-        ).fetchone()
-        seq = (row[0] or 0) + 1
+    row = conn.execute(
+        "SELECT MAX(CAST(SUBSTR(quote_number, 8) AS INTEGER)) "
+        "FROM quotes WHERE quote_number LIKE ?",
+        (f"Q-{year}-%",),
+    ).fetchone()
+    seq = (row[0] or 0) + 1
     return f"Q-{year}-{seq:04d}"
 
 
@@ -116,7 +114,9 @@ def save_quote(
     now = datetime.now().isoformat(timespec="seconds")
     params_json = json.dumps(asdict(params), ensure_ascii=False)
 
-    with _conn() as conn:
+    conn = _conn()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
         if quote_id is not None:
             conn.execute(
                 """UPDATE quotes
@@ -127,7 +127,7 @@ def save_quote(
             )
             conn.execute("DELETE FROM quote_items WHERE quote_id=?", (quote_id,))
         else:
-            qnum = _next_quote_number()
+            qnum = _next_quote_number_seq(conn)
             cur = conn.execute(
                 """INSERT INTO quotes
                    (quote_number, customer_id, staff_id, title,
@@ -143,6 +143,12 @@ def save_quote(
                 "INSERT INTO quote_items (quote_id, item_order, product_json) VALUES (?,?,?)",
                 (quote_id, i, pj),
             )
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    finally:
+        conn.close()
 
     return quote_id
 
