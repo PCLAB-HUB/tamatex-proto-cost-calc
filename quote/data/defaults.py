@@ -114,3 +114,7 @@ DELIVERY_TO = ["コーヨー", "（その他）"]
 SHIP_TO = ["関東", "関西", "中部", "九州", "（その他）"]
 CONTAINER_FT = [20, 40]
 METHODS = ["コンテナ", "路線便"]
+
+ITEM_TYPES = ["", "2p", "内箱1c印刷", "内箱opp変更", "（その他）"]
+FABRIC_QUALITIES = ["", "（その他）"]
+PACKING_SIZES = ["", "（その他）"]

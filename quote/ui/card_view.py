@@ -7,7 +7,10 @@ import streamlit as st
 from quote.data.defaults import (
     CONTAINER_FT,
     DELIVERY_TO,
+    FABRIC_QUALITIES,
+    ITEM_TYPES,
     METHODS,
+    PACKING_SIZES,
     PORTS,
     SHIP_TO,
     SUPPLIERS,
@@ -96,12 +99,23 @@ def _render_product_card(idx: int) -> ProductInput | None:
     )
     s1, s2, s3, s4 = st.columns(4)
     with s1:
-        size = st.text_input("サイズ(cm)", key=_key(idx, "size"), placeholder="13*9.5*0.6")
+        item_type = st.selectbox("アイテム", ITEM_TYPES, key=_key(idx, "item"))
     with s2:
-        weight = st.number_input("重量(g)", key=_key(idx, "wt"), value=0.0, format="%.1f")
+        size = st.text_input("サイズ(cm)", key=_key(idx, "size"), placeholder="13*9.5*0.6")
     with s3:
-        packing = st.number_input("入数", key=_key(idx, "pk"), value=1, min_value=1)
+        fabric = st.selectbox("生地質", FABRIC_QUALITIES, key=_key(idx, "fabric"))
     with s4:
+        pack_size = st.selectbox("梱包サイズ", PACKING_SIZES, key=_key(idx, "pksize"))
+
+    s5, s6, s7, s8 = st.columns(4)
+    with s5:
+        weight = st.number_input("重量(g)", key=_key(idx, "wt"), value=0.0, format="%.1f")
+    with s6:
+        momme = weight / 3.75 if weight > 0 else 0.0
+        st.metric("仕上目方(匁)", f"{momme:.1f}")
+    with s7:
+        packing = st.number_input("入数", key=_key(idx, "pk"), value=1, min_value=1)
+    with s8:
         load = st.number_input("積載量", key=_key(idx, "ld"), value=0.0, format="%.0f")
 
     f1, f2, f3 = st.columns(3)
@@ -153,9 +167,13 @@ def _render_product_card(idx: int) -> ProductInput | None:
         ship_to=ship if ship != "（その他）" else "",
         container_ft=ft,
         method=method,
+        item_type=item_type if item_type != "（その他）" else "",
         package_size_cm=size,
         weight_g=weight,
+        weight_momme=momme,
+        fabric_quality=fabric if fabric != "（その他）" else "",
         packing_quantity=packing,
+        packing_size=pack_size if pack_size != "（その他）" else "",
         container_load=load,
         fob_usd=fob,
         other_processing_usd=oproc,

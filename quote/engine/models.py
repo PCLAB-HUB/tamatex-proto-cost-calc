@@ -26,11 +26,15 @@ class ProductInput:
     product_name: str = ""
     prototype_code: str = ""
 
-    # --- 製品仕様 (K-Q列) ---
+    # --- 製品仕様 (J-R列) ---
+    item_type: str = ""
     package_size_cm: str = ""
+    weight_momme: float = 0.0
     weight_g: float = 0.0
-    packing_quantity: int = 1
+    fabric_quality: str = ""
     method: str = "コンテナ"
+    packing_quantity: int = 1
+    packing_size: str = ""
 
     # --- FOB関連 (S-Y列) ---
     fob_usd: float = 0.0
