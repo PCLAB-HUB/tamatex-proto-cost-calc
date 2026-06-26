@@ -239,43 +239,43 @@ def _render_result_card(name: str, result: QuoteResult) -> None:
         )
 
 
-def render_card_view(params: GlobalParams) -> None:
-    """カード+ダッシュボード型ビューを描画."""
-    if "card_num_products" not in st.session_state:
-        st.session_state.card_num_products = 1
+def render_card_view(
+    params: GlobalParams, prefix: str = "card"
+) -> tuple[list[ProductInput], list[tuple[str, QuoteResult]]]:
+    """カード+ダッシュボード型ビューを描画.
 
+    Returns (products, results) for save/export use.
+    """
+    num_key = f"{prefix}_num_products"
+    if num_key not in st.session_state:
+        st.session_state[num_key] = 1
+
+    all_products: list[ProductInput] = []
     all_results: list[tuple[str, QuoteResult]] = []
 
-    for i in range(st.session_state.card_num_products):
-        st.markdown(
-            f'<div style="background:#FFFFFF; border:1px solid #DADCE0; border-radius:12px;'
-            f'padding:20px 24px; margin-bottom:16px; box-shadow:0 1px 4px rgba(0,0,0,0.06);">',
-            unsafe_allow_html=True,
-        )
+    for i in range(st.session_state[num_key]):
+        with st.container(border=True):
+            col_title, col_del = st.columns([8, 1])
+            with col_title:
+                st.markdown(f"#### 商品 {i + 1}")
+            with col_del:
+                if i > 0 and st.button("🗑", key=f"{prefix}_del_{i}"):
+                    st.session_state[num_key] -= 1
+                    st.rerun()
 
-        col_title, col_del = st.columns([8, 1])
-        with col_title:
-            st.markdown(f"#### 商品 {i + 1}")
-        with col_del:
-            if i > 0 and st.button("🗑", key=f"card_del_{i}"):
-                st.session_state.card_num_products -= 1
-                st.rerun()
+            product = _render_product_card(i)
 
-        product = _render_product_card(i)
-
-        if product is not None:
-            result = calculate(product, params)
-            all_results.append((product.product_name, result))
-            st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
-            _render_result_card(product.product_name, result)
-
-        st.markdown("</div>", unsafe_allow_html=True)
+            if product is not None:
+                all_products.append(product)
+                result = calculate(product, params)
+                all_results.append((product.product_name, result))
+                st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+                _render_result_card(product.product_name, result)
 
     if st.button("＋ 商品を追加", type="primary"):
-        st.session_state.card_num_products += 1
+        st.session_state[num_key] += 1
         st.rerun()
 
-    # 全体集計ダッシュボード
     if len(all_results) > 1:
         st.markdown("---")
         total_sales = sum(r.pricing_with_amort.sales_amount for _, r in all_results)
@@ -291,3 +291,5 @@ def render_card_view(params: GlobalParams) -> None:
         for col, html in zip(cols, summary_cards):
             with col:
                 st.markdown(html, unsafe_allow_html=True)
+
+    return all_products, all_results
