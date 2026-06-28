@@ -8,6 +8,8 @@ config/config.yaml
 logs/*.log
 logs/*.log.*
 *.db
+*.db.bak_*
+!quote_data.db
 .env
 .DS_Store
 .worktrees/
