@@ -109,6 +109,22 @@ st.markdown(
 
     /* メインエリア */
     [data-testid="stMetricValue"] { font-size: 1.3rem; }
+
+    /* メインエリアの入力欄: 真っ白で見えにくくなるのを防ぐ */
+    section.main [data-testid="stNumberInput"] input,
+    section.main [data-testid="stTextInput"] input,
+    section.main [data-testid="stTextArea"] textarea,
+    section.main [data-baseweb="select"] > div {
+        background-color: #F1F5F9 !important;
+        border: 1px solid #E2E8F0 !important;
+        border-radius: 6px !important;
+    }
+    section.main [data-testid="stNumberInput"] input:focus,
+    section.main [data-testid="stTextInput"] input:focus,
+    section.main [data-testid="stTextArea"] textarea:focus {
+        border-color: #1B73E8 !important;
+        box-shadow: 0 0 0 1px #1B73E8 !important;
+    }
     </style>
     """,
     unsafe_allow_html=True,
