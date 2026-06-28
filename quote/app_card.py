@@ -110,20 +110,28 @@ st.markdown(
     /* メインエリア */
     [data-testid="stMetricValue"] { font-size: 1.3rem; }
 
-    /* メインエリアの入力欄: 真っ白で見えにくくなるのを防ぐ */
-    section.main [data-testid="stNumberInput"] input,
-    section.main [data-testid="stTextInput"] input,
-    section.main [data-testid="stTextArea"] textarea,
-    section.main [data-baseweb="select"] > div {
+    /* 入力欄: 真っ白で見えにくくなるのを防ぐ.
+       サイドバー (data-testid=stSidebar) 内は上の高specificity ルールで上書き保護される. */
+    [data-testid="stNumberInput"] input,
+    [data-testid="stTextInput"] input,
+    [data-testid="stTextArea"] textarea,
+    [data-baseweb="select"] > div {
         background-color: #F1F5F9 !important;
-        border: 1px solid #E2E8F0 !important;
+        border: 1px solid #CBD5E1 !important;
         border-radius: 6px !important;
     }
-    section.main [data-testid="stNumberInput"] input:focus,
-    section.main [data-testid="stTextInput"] input:focus,
-    section.main [data-testid="stTextArea"] textarea:focus {
+    [data-testid="stNumberInput"] input:focus,
+    [data-testid="stTextInput"] input:focus,
+    [data-testid="stTextArea"] textarea:focus {
         border-color: #1B73E8 !important;
         box-shadow: 0 0 0 1px #1B73E8 !important;
+    }
+    /* サイドバー内は再度ダーク背景に固定 (specificity が同等のため明示再指定) */
+    [data-testid="stSidebar"] [data-testid="stNumberInput"] input,
+    [data-testid="stSidebar"] [data-testid="stTextInput"] input {
+        background-color: #334155 !important;
+        border: 1px solid #475569 !important;
+        color: #F1F5F9 !important;
     }
     </style>
     """,
