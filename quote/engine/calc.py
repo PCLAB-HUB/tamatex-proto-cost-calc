@@ -339,6 +339,33 @@ def _validate(product: ProductInput, lot: int) -> list[str]:
                 "償却別途の歩引率が100%以上です。償却額（償却別途）を計算できません。"
             )
 
+    # 物流: packing_quantity<=0 で物流ケース費用が正なら原価から消える
+    logistics_case_costs = (
+        product.logistics_cardboard
+        + product.logistics_io_fee
+        + product.logistics_storage_months * product.logistics_storage_fee
+        + product.logistics_slip_fee
+        + product.logistics_freight
+    )
+    if product.packing_quantity <= 0 and logistics_case_costs > 0:
+        warnings.append(
+            "梱包入数が0ですが物流ケース費用（段ボール・入出庫・保管・運賃等）"
+            "が入力されています。物流経費が原価に含まれません。"
+        )
+
+    # 国内加工: domestic_packing_qty<=0 で国内ケース費用が正なら誤った除算
+    domestic_case_costs = (
+        product.domestic_cardboard
+        + product.domestic_io
+        + product.domestic_storage_months * product.domestic_storage_fee
+        + product.domestic_freight
+    )
+    if product.domestic_packing_qty <= 0 and domestic_case_costs > 0:
+        warnings.append(
+            "国内加工梱包入数が0ですが国内ケース費用（段ボール・入出庫・保管・運賃等）"
+            "が入力されています。原価が正しく計算できません。"
+        )
+
     return warnings
 
 

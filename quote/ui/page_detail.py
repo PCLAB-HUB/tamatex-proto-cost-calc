@@ -98,6 +98,15 @@ def render_detail_page(quote_id: int, params: GlobalParams) -> None:
     stored_params = quote.get("params") or {}
     current_params_dict = asdict(params)
     params_dirty = current_params_dict != stored_params
+
+    # 楽観ロック用の baseline updated_at を session_state に保持。
+    # Streamlit は rerun のたびに quote を再取得するため、quote["updated_at"]
+    # を expected として使うとロックが効かない（最新値を常に基準にしてしまう）。
+    # サイドバーで編集を始めた時点の updated_at を起点に固定する。
+    baseline_key = f"qparams_baseline_{quote_id}"
+    if baseline_key not in st.session_state:
+        st.session_state[baseline_key] = quote["updated_at"]
+
     if params_dirty:
         col_warn, col_btn = st.columns([4, 1])
         with col_warn:
@@ -110,9 +119,13 @@ def render_detail_page(quote_id: int, params: GlobalParams) -> None:
                 ok = update_quote_params(
                     quote_id,
                     params,
-                    expected_updated_at=quote["updated_at"],
+                    expected_updated_at=st.session_state[baseline_key],
                 )
                 if ok:
+                    # 成功時のみ baseline を更新（次の編集の起点に）
+                    refreshed = get_quote(quote_id)
+                    if refreshed:
+                        st.session_state[baseline_key] = refreshed["updated_at"]
                     st.success("保存しました。")
                     st.rerun()
                 else:
