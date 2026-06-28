@@ -321,6 +321,24 @@ def _validate(product: ProductInput, lot: int) -> list[str]:
             "センターフィー＋歩引率が100%以上です。歩積込売価を計算できません。"
         )
 
+    # 価格パス2 (償却別途) — 入力されている場合のみ検証
+    ex_amort_used = (
+        product.quote_price_ex_amort > 0
+        or product.center_fee_ex_amort > 0
+        or product.rebate_ex_amort > 0
+        or product.retail_price_ex_amort > 0
+    )
+    if ex_amort_used:
+        if product.center_fee_ex_amort + product.rebate_ex_amort >= 1.0:
+            warnings.append(
+                "償却別途のセンターフィー＋歩引率が100%以上です。"
+                "歩積込売価（償却別途）を計算できません。"
+            )
+        if product.rebate_ex_amort >= 1.0:
+            warnings.append(
+                "償却別途の歩引率が100%以上です。償却額（償却別途）を計算できません。"
+            )
+
     return warnings
 
 

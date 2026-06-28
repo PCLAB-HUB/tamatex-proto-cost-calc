@@ -214,11 +214,22 @@ def render_detail_page(quote_id: int, params: GlobalParams) -> None:
                     del st.session_state[k]
             st.rerun()
     with b4:
-        html_bytes = generate_quote_html(quote, results, params).encode("utf-8")
-        st.download_button(
-            label="📄 見積書出力",
-            data=html_bytes,
-            file_name=f"{quote.get('quote_number', 'quote')}.html",
-            mime="text/html",
-            use_container_width=True,
-        )
+        if params_dirty:
+            st.button(
+                "📄 見積書出力（先に保存）",
+                use_container_width=True,
+                disabled=True,
+                help=(
+                    "サイドバーのパラメータが見積もりの保存値と異なります。"
+                    "上の「💾 パラメータを保存」を押してから出力してください。"
+                ),
+            )
+        else:
+            html_bytes = generate_quote_html(quote, results, params).encode("utf-8")
+            st.download_button(
+                label="📄 見積書出力",
+                data=html_bytes,
+                file_name=f"{quote.get('quote_number', 'quote')}.html",
+                mime="text/html",
+                use_container_width=True,
+            )
