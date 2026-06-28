@@ -256,6 +256,22 @@ def save_quote(
     return quote_id
 
 
+def update_quote_params(quote_id: int, params: GlobalParams) -> None:
+    """params_json のみを更新する（商品・ヘッダーには触れない）.
+
+    save_quote() は商品テーブルを全置換するため、パラメータだけ更新したい
+    場面で他フィールドを巻き込む副作用がある。本関数は params_json と
+    updated_at のみを書き換える.
+    """
+    now = datetime.now().isoformat(timespec="seconds")
+    params_json = json.dumps(asdict(params), ensure_ascii=False)
+    with _conn() as conn:
+        conn.execute(
+            "UPDATE quotes SET params_json=?, updated_at=? WHERE id=?",
+            (params_json, now, quote_id),
+        )
+
+
 def list_quotes(
     customer_id: int | None = None, staff_id: int | None = None
 ) -> list[dict]:

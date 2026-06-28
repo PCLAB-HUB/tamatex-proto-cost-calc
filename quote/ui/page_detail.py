@@ -10,7 +10,13 @@ import streamlit as st
 
 from quote.engine.calc import calculate
 from quote.engine.models import GlobalParams, ProductInput, QuoteResult
-from quote.storage.db import get_quote, list_customers, list_staff, save_quote
+from quote.storage.db import (
+    get_quote,
+    list_customers,
+    list_staff,
+    save_quote,
+    update_quote_params,
+)
 from quote.ui.pdf_export import generate_quote_html
 
 
@@ -101,15 +107,7 @@ def render_detail_page(quote_id: int, params: GlobalParams) -> None:
             )
         with col_btn:
             if st.button("💾 パラメータを保存", use_container_width=True):
-                save_quote(
-                    customer_id=quote["customer_id"],
-                    staff_id=quote["staff_id"],
-                    title=quote.get("title") or "",
-                    products=_load_products_from_quote(quote),
-                    params=params,
-                    notes=quote.get("notes") or "",
-                    quote_id=quote_id,
-                )
+                update_quote_params(quote_id, params)
                 st.success("保存しました。")
                 st.rerun()
 
@@ -118,6 +116,27 @@ def render_detail_page(quote_id: int, params: GlobalParams) -> None:
     results: list[tuple[ProductInput, QuoteResult]] = []
     for p in products:
         results.append((p, calculate(p, params)))
+
+    # 警告集約 — 計算不能な価格があればエクスポート禁止
+    aggregated_warnings: list[tuple[int, str, str]] = []
+    has_blocking = False
+    for idx, (p, r) in enumerate(results):
+        for w in r.warnings:
+            aggregated_warnings.append((idx + 1, p.product_name, w))
+            if "計算できません" in w:
+                has_blocking = True
+    if aggregated_warnings:
+        label = (
+            f"⚠️ 計算警告 {len(aggregated_warnings)} 件"
+            + ("（エクスポート不可）" if has_blocking else "")
+        )
+        with st.expander(label, expanded=has_blocking):
+            for no, name, w in aggregated_warnings:
+                msg = f"商品{no}「{name}」: {w}"
+                if "計算できません" in w:
+                    st.error(msg)
+                else:
+                    st.warning(msg)
 
     # 明細テーブル
     st.markdown("### 明細")
@@ -222,6 +241,16 @@ def render_detail_page(quote_id: int, params: GlobalParams) -> None:
                 help=(
                     "サイドバーのパラメータが見積もりの保存値と異なります。"
                     "上の「💾 パラメータを保存」を押してから出力してください。"
+                ),
+            )
+        elif has_blocking:
+            st.button(
+                "📄 見積書出力（計算エラー）",
+                use_container_width=True,
+                disabled=True,
+                help=(
+                    "価格が計算できない商品があります。"
+                    "上の警告を解消してから出力してください。"
                 ),
             )
         else:
