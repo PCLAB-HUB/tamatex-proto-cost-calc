@@ -299,6 +299,16 @@ def _validate(product: ProductInput, lot: int) -> list[str]:
         or product.jq_card > 0
         or product.embroidery_card > 0
         or product.print_unit_price > 0
+        or product.layout > 0
+        or product.name_plate > 0
+        or product.seal_plate > 0
+        or product.tab_plate > 0
+        or product.bag_plate > 0
+        or product.cardboard_plate > 0
+        or product.other_depreciation > 0
+        or product.sample_cost > 0
+        or product.quality_inspection > 0
+        or product.other_amortization > 0
     )
     if lot <= 0 and has_per_lot_costs:
         warnings.append(

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import html
+
 import streamlit as st
 
 from quote.storage.db import delete_quote, list_customers, list_quotes, list_staff
@@ -49,17 +51,21 @@ def render_list_page() -> None:
     for q in quotes:
         with st.container(border=True):
             c1, c2, c3, c4, c5 = st.columns([2, 2, 2, 1, 1])
+            qnum = html.escape(str(q["quote_number"]))
+            title = html.escape(str(q.get("title") or "(無題)"))
+            cname = html.escape(str(q.get("customer_name") or "-"))
+            sname = html.escape(str(q.get("staff_name") or "-"))
             with c1:
                 st.markdown(
-                    f"**{q['quote_number']}**<br>"
+                    f"**{qnum}**<br>"
                     f"<span style='font-size:0.85rem;color:#5F6368;'>"
-                    f"{q.get('title') or '(無題)'}</span>",
+                    f"{title}</span>",
                     unsafe_allow_html=True,
                 )
             with c2:
                 st.markdown(
-                    f"🏢 {q.get('customer_name', '-')}<br>"
-                    f"<span style='font-size:0.85rem;'>👤 {q.get('staff_name', '-')}</span>",
+                    f"🏢 {cname}<br>"
+                    f"<span style='font-size:0.85rem;'>👤 {sname}</span>",
                     unsafe_allow_html=True,
                 )
             with c3:
@@ -68,10 +74,14 @@ def render_list_page() -> None:
                     "submitted": "📤 提出済",
                     "approved": "✅ 承認済",
                 }
+                status_label = html.escape(
+                    str(status_map.get(q["status"], q["status"]))
+                )
+                updated = html.escape(str(q["updated_at"])[:10])
                 st.markdown(
-                    f"{status_map.get(q['status'], q['status'])}<br>"
+                    f"{status_label}<br>"
                     f"<span style='font-size:0.8rem;color:#5F6368;'>"
-                    f"更新: {q['updated_at'][:10]}</span>",
+                    f"更新: {updated}</span>",
                     unsafe_allow_html=True,
                 )
             with c4:

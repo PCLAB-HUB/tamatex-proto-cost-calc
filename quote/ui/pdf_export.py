@@ -27,8 +27,9 @@ def generate_quote_html(
     customer_name = _esc(quote.get("customer_name") or "")
     staff_name = _esc(quote.get("staff_name") or "")
     title = _esc(quote.get("title") or "")
-    notes = _esc(quote.get("notes") or "")
     created_at = _esc((quote.get("created_at") or "")[:10])
+    # 注: notes は社内メモ（顧客非表示）として入力されるため、
+    # 顧客向け HTML には出力しない。
 
     rows_html = ""
     total_sales = 0.0
@@ -221,7 +222,7 @@ def generate_quote_html(
   </dl>
   <dl class="footer-block">
     <dt>備考</dt>
-    <dd>{notes or "&nbsp;"}</dd>
+    <dd>&nbsp;</dd>
   </dl>
 </div>
 

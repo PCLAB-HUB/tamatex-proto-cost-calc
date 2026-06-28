@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import html
 import json
+from dataclasses import asdict
 
 import streamlit as st
 
@@ -48,35 +50,68 @@ def render_detail_page(quote_id: int, params: GlobalParams) -> None:
         return
 
     # ヘッダー
+    qnum = html.escape(str(quote["quote_number"]))
+    created = html.escape(str(quote["created_at"])[:10])
+    cname = html.escape(str(quote.get("customer_name") or "-"))
+    sname = html.escape(str(quote.get("staff_name") or "-"))
+    title = html.escape(str(quote.get("title") or "(無題)"))
+    status_map = {
+        "draft": "📝 下書き",
+        "submitted": "📤 提出済",
+        "approved": "✅ 承認済",
+    }
+    status_label = html.escape(
+        str(status_map.get(quote["status"], quote["status"]))
+    )
     with st.container(border=True):
         h1, h2, h3 = st.columns([2, 2, 2])
         with h1:
             st.markdown(
-                f"**{quote['quote_number']}**<br>"
-                f"<span style='color:#5F6368;'>作成: {quote['created_at'][:10]}</span>",
+                f"**{qnum}**<br>"
+                f"<span style='color:#5F6368;'>作成: {created}</span>",
                 unsafe_allow_html=True,
             )
         with h2:
             st.markdown(
-                f"🏢 {quote.get('customer_name', '-')}<br>"
-                f"👤 {quote.get('staff_name', '-')}",
+                f"🏢 {cname}<br>"
+                f"👤 {sname}",
                 unsafe_allow_html=True,
             )
         with h3:
-            status_map = {
-                "draft": "📝 下書き",
-                "submitted": "📤 提出済",
-                "approved": "✅ 承認済",
-            }
             st.markdown(
-                f"{status_map.get(quote['status'], quote['status'])}<br>"
+                f"{status_label}<br>"
                 f"<span style='color:#5F6368;'>"
-                f"{quote.get('title') or '(無題)'}</span>",
+                f"{title}</span>",
                 unsafe_allow_html=True,
             )
 
     if quote.get("notes"):
         st.caption(f"備考: {quote['notes']}")
+
+    # サイドバー params と保存済 params の差分検知（乖離防止）
+    stored_params = quote.get("params") or {}
+    current_params_dict = asdict(params)
+    params_dirty = current_params_dict != stored_params
+    if params_dirty:
+        col_warn, col_btn = st.columns([4, 1])
+        with col_warn:
+            st.warning(
+                "⚠️ サイドバーのパラメータがこの見積もりの保存値と異なります。"
+                "保存せずに閉じると次回開いた時に乖離します。"
+            )
+        with col_btn:
+            if st.button("💾 パラメータを保存", use_container_width=True):
+                save_quote(
+                    customer_id=quote["customer_id"],
+                    staff_id=quote["staff_id"],
+                    title=quote.get("title") or "",
+                    products=_load_products_from_quote(quote),
+                    params=params,
+                    notes=quote.get("notes") or "",
+                    quote_id=quote_id,
+                )
+                st.success("保存しました。")
+                st.rerun()
 
     # 商品を計算
     products = _load_products_from_quote(quote)
