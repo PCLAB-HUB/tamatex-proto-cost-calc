@@ -73,31 +73,49 @@ python scripts/initial_setup.py
 
 ## 現在の作業状態
 
+### 直近の作業（2026-06-29）
+
+**Streamlit Cloud デプロイ完了** — クライアント確認用 URL を公開
+
+- **公開URL**: `https://tamatex-proto-cost-calc-smtuk3y4wpamumnzmxib2p.streamlit.app/`
+- **デプロイ先リポジトリ**: `PCLAB-HUB/tamatex-proto-cost-calc` (Public)
+- **エントリーポイント**: 既存設定 `proto/app.py` を quote/app_card.py を exec するプロキシとして配置
+- 詳細は memory `reference_streamlit_deploy` 参照
+
+直近の整備:
+1. **Codex LGTM ループ 5 ラウンド** — 13件指摘中12件修正（残1件は save_quote 全体ロック化、次フェーズ）
+2. **DBクリーニング** — 既存 quote_items の改行混入 30件をクリーニング（scripts/clean_db_whitespace.py に常駐）
+3. **品名表示の改行吸収** — Excel セル内改行 (\n) を表示時に正規化、import_excel でも取込時に正規化
+4. **Streamlit Cloud対応** — テーマ Light 固定、streamlit==1.58.0 ピン留め、CSS でメインエリア入力欄に明示背景・ボーダー
+
 ### 直近の作業（2026-06-27）
 
-**原価計算書見積もり（プロト） プロトタイプ新規構築** — quote/ ディレクトリに構築（proto/のタオル版とは別）
+**原価計算書見積もり（プロト） プロトタイプ新規構築** — quote/ ディレクトリに構築
 
 1. **計算エンジン** — 原価計算書参考資料.xlsxの154列の数式をPython 20関数に忠実変換
    - FOB→C&F→CIF→仕入値→原価→売価→粗利の計算チェーン
-   - 22テスト全PASS、94商品中91件がExcel完全一致（残3件はExcel手動上書き）
-   - Codex adversarial-review + review 2回実施、指摘全件修正済み
+   - 26テスト全PASS、94商品中91件がExcel完全一致（残3件はExcel手動上書き）
+   - Codex adversarial-review + review 多ラウンド実施、計算ロジック・データ整合性・XSS 全件修正済み
 
 2. **UI** — B案（カード+ダッシュボード）採用、3階層ナビゲーション
    - ① 見積もり一覧（顧客・担当者フィルタ）
-   - ② 見積もり明細（ヘッダー+商品テーブル+合計KPI）
+   - ② 見積もり明細（ヘッダー+商品テーブル+合計KPI、warnings集約、エクスポートgate）
    - ③ 商品計算シート（1商品の原価計算詳細）
    - ダークサイドバー、ライトメインエリア
 
 3. **管理機能** — 顧客マスタ・担当者マスタ・パラメータ設定・見積書HTML出力
    - SQLite永続化、見積もり番号自動採番(Q-2026-XXXX)
-   - パラメータは見積もり単位で保存・復元（グローバル固定ではない）
+   - パラメータは見積もり単位で保存・復元（楽観ロック付き、session_state baseline）
 
 ### 次に予定しているタスク
-- 週次クライアントミーティングでフィードバック収集
-- クライアント確認待ち: 選択肢マスタ実データ、コンテナ積載量計算方法、センターフィー/歩引の運用
+- クライアントフィードバック収集（公開 URL 経由）
+- クライアント確認待ち: 選択肢マスタ実データ、コンテナ積載量(R列)計算方法、センターフィー/歩引の運用
 - 見積書PDF出力の充実化（会社ロゴ、印影、消費税計算等）
+- save_quote() 全体の楽観ロック化（並行編集対応・次フェーズ）
 
 ### 未解決の問題・注意点
 - **R列（コンテナ積載量）**: 正確な計算式が不明（旧Excelの計算シートと新Excelの値が完全一致しない）。手動入力で運用中
 - **選択肢マスタ**: 仕入先・揚地・出荷先等は現データが1パターンのみ。クライアント確認要
-- **起動方法**: `/Users/pclab/Desktop/Project/tamatex/.venv/bin/python -m streamlit run quote/app_card.py --server.port 8503`
+- **デプロイ先データ永続化なし**: Streamlit Cloud コンテナ揮発性のため、クライアントの編集はセッション中のみ
+- **ローカル起動**: `/Users/pclab/Desktop/Project/tamatex/.venv/bin/python -m streamlit run quote/app_card.py --server.port 8503`
+- **Cloud 再デプロイ**: tamatex-proto-cost-calc リポジトリの main に push で自動更新。初回エラー時は手動 Reboot 必要
