@@ -186,7 +186,9 @@ def render_detail_page(quote_id: int, params: GlobalParams) -> None:
             with cols[0]:
                 st.markdown(f"**{i + 1}**")
             with cols[1]:
-                st.markdown(f"**{p.product_name}**")
+                # Excel セル内改行 (Alt+Enter) を吸収。Markdown の太字構文を壊さないよう正規化
+                name = (p.product_name or "").replace("\n", " ").replace("\r", " ").strip()
+                st.markdown(f"**{name}**")
             with cols[2]:
                 st.markdown(_fmt_jpy(pr.quote_price))
             with cols[3]:

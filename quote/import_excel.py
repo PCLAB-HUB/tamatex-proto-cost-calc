@@ -72,7 +72,7 @@ def import_all():
             delivery_to=_val(ws, row, 'E', ''),
             container_ft=_int(ws, row, 'F', 20),
             ship_to=_val(ws, row, 'G', ''),
-            product_name=str(name),
+            product_name=str(name).replace("\n", " ").replace("\r", " ").strip(),
             prototype_code=str(_val(ws, row, 'I', '')),
             item_type=_val(ws, row, 'J', ''),
             package_size_cm=_val(ws, row, 'K', ''),
