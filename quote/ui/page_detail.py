@@ -107,9 +107,19 @@ def render_detail_page(quote_id: int, params: GlobalParams) -> None:
             )
         with col_btn:
             if st.button("💾 パラメータを保存", use_container_width=True):
-                update_quote_params(quote_id, params)
-                st.success("保存しました。")
-                st.rerun()
+                ok = update_quote_params(
+                    quote_id,
+                    params,
+                    expected_updated_at=quote["updated_at"],
+                )
+                if ok:
+                    st.success("保存しました。")
+                    st.rerun()
+                else:
+                    st.error(
+                        "他のセッションが先に更新したため保存できませんでした。"
+                        "一覧から開き直して再度操作してください。"
+                    )
 
     # 商品を計算
     products = _load_products_from_quote(quote)
@@ -117,20 +127,19 @@ def render_detail_page(quote_id: int, params: GlobalParams) -> None:
     for p in products:
         results.append((p, calculate(p, params)))
 
-    # 警告集約 — 計算不能な価格があればエクスポート禁止
+    # 警告集約 — 計算警告（コスト未算入 or 計算不能）は全てエクスポート禁止扱い.
+    # 顧客向け見積書がコスト過小・粗利過大の状態で出力されるのを防ぐため、
+    # warnings が1件でもあれば has_blocking=True とする.
     aggregated_warnings: list[tuple[int, str, str]] = []
-    has_blocking = False
     for idx, (p, r) in enumerate(results):
         for w in r.warnings:
             aggregated_warnings.append((idx + 1, p.product_name, w))
-            if "計算できません" in w:
-                has_blocking = True
+    has_blocking = bool(aggregated_warnings)
     if aggregated_warnings:
         label = (
-            f"⚠️ 計算警告 {len(aggregated_warnings)} 件"
-            + ("（エクスポート不可）" if has_blocking else "")
+            f"⚠️ 計算警告 {len(aggregated_warnings)} 件（エクスポート不可 — 解消してください）"
         )
-        with st.expander(label, expanded=has_blocking):
+        with st.expander(label, expanded=True):
             for no, name, w in aggregated_warnings:
                 msg = f"商品{no}「{name}」: {w}"
                 if "計算できません" in w:

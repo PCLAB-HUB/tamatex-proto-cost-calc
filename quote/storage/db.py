@@ -256,20 +256,31 @@ def save_quote(
     return quote_id
 
 
-def update_quote_params(quote_id: int, params: GlobalParams) -> None:
-    """params_json のみを更新する（商品・ヘッダーには触れない）.
+def update_quote_params(
+    quote_id: int,
+    params: GlobalParams,
+    expected_updated_at: str,
+) -> bool:
+    """params_json のみを楽観ロック付きで更新する.
 
     save_quote() は商品テーブルを全置換するため、パラメータだけ更新したい
     場面で他フィールドを巻き込む副作用がある。本関数は params_json と
-    updated_at のみを書き換える.
+    updated_at のみを書き換える。並行編集による上書きを防ぐため、
+    呼び出し時に取得していた updated_at と DB の現値が一致しないと
+    更新せず False を返す（stale write 防止）.
+
+    Returns:
+        更新できれば True、stale ならば False.
     """
     now = datetime.now().isoformat(timespec="seconds")
     params_json = json.dumps(asdict(params), ensure_ascii=False)
     with _conn() as conn:
-        conn.execute(
-            "UPDATE quotes SET params_json=?, updated_at=? WHERE id=?",
-            (params_json, now, quote_id),
+        cur = conn.execute(
+            "UPDATE quotes SET params_json=?, updated_at=? "
+            "WHERE id=? AND updated_at=?",
+            (params_json, now, quote_id, expected_updated_at),
         )
+        return cur.rowcount == 1
 
 
 def list_quotes(
